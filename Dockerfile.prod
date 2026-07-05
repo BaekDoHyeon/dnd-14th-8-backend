@@ -1,0 +1,12 @@
+# CI에서 빌드된 JAR를 담는 런타임 전용 이미지
+# 전제: ./gradlew build 로 build/libs/*.jar 생성 후 docker build
+# COPY만 수행하므로 QEMU 없이 arm64 크로스 빌드 가능
+FROM eclipse-temurin:25-jre
+
+WORKDIR /app
+
+COPY build/libs/*.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

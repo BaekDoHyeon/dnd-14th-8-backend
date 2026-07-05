@@ -44,3 +44,10 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Terraform ###
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
