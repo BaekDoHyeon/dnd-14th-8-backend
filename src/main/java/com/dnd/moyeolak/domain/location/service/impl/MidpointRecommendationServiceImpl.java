@@ -22,6 +22,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -40,6 +43,8 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
     private static final int MAX_CANDIDATE_STATIONS = 10;
     private static final int REFINED_CANDIDATE_STATIONS = 5;
     private static final int TOP_RECOMMENDATIONS = 3;
+    // OdsayClient의 Semaphore 허용치(5)에 맞춘 병렬도 — 더 늘려도 세마포어에서 대기만 한다
+    private static final int TRANSIT_EVALUATION_THREADS = 5;
 
     @Override
     @Cacheable(value = "midpointRecommendations", key = "#meetingId + '_' + #departureTime")
@@ -163,9 +168,12 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
             List<StationDrivingCandidate> candidates,
             CenterPointDto centerPoint
     ) {
+        List<List<TransitRouteResult>> transitResults = calculateTransitRoutes(votes, candidates);
+
         List<EvaluatedStation> results = new ArrayList<>();
 
-        for (StationDrivingCandidate candidate : candidates) {
+        for (int candidateIdx = 0; candidateIdx < candidates.size(); candidateIdx++) {
+            StationDrivingCandidate candidate = candidates.get(candidateIdx);
             Station station = candidate.station();
             List<RouteDto> routes = new ArrayList<>();
             int unreachableTransitRouteCount = 0;
@@ -174,7 +182,7 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
 
             for (int voteIdx = 0; voteIdx < votes.size(); voteIdx++) {
                 LocationVote vote = votes.get(voteIdx);
-                TransitRouteResult transitRoute = odsayTransitRouteClient.calculate(vote, station);
+                TransitRouteResult transitRoute = transitResults.get(candidateIdx).get(voteIdx);
                 DrivingRouteResult drivingRoute = candidate.drivingRouteAt(voteIdx);
 
                 if (transitRoute.reachable()) {
@@ -244,6 +252,30 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
                         .routes(sorted.get(i).recommendation().routes())
                         .build())
                 .toList();
+    }
+
+    private List<List<TransitRouteResult>> calculateTransitRoutes(
+            List<LocationVote> votes,
+            List<StationDrivingCandidate> candidates
+    ) {
+        ExecutorService executor = Executors.newFixedThreadPool(TRANSIT_EVALUATION_THREADS);
+        try {
+            List<List<CompletableFuture<TransitRouteResult>>> futures = candidates.stream()
+                    .map(candidate -> votes.stream()
+                            .map(vote -> CompletableFuture.supplyAsync(
+                                    () -> odsayTransitRouteClient.calculate(vote, candidate.station()),
+                                    executor))
+                            .toList())
+                    .toList();
+
+            return futures.stream()
+                    .map(stationFutures -> stationFutures.stream()
+                            .map(CompletableFuture::join)
+                            .toList())
+                    .toList();
+        } finally {
+            executor.shutdown();
+        }
     }
 
     private String resolveDepartureName(LocationVote vote) {

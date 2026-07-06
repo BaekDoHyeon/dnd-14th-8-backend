@@ -77,11 +77,6 @@ public class OdsayClient {
                     // finally 실행 후 다음 attempt로 계속
                 } finally {
                     rateLimiter.release();
-                    try {
-                        Thread.sleep(200);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
