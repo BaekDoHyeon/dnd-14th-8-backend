@@ -24,11 +24,11 @@ import java.lang.annotation.Target;
 
                     ### 동작 방식
                     1. DB 캐시 조회 (30일 TTL)
-                    2. 캐시 미스 시 Google Text Search + Kakao 검증으로 실시간 검색
+                    2. 캐시 미스 시 Kakao Local 키워드 검색으로 실시간 검색
                     3. 검증된 장소만 DB에 캐싱 후 반환
 
                     ### 영업시간
-                    - Google Places API에서 제공하는 영업시간 데이터를 기반으로 현재 영업 여부와 메시지를 계산합니다
+                    - 현재 Kakao Local 응답에는 영업시간이 없어 isOpen, businessStatusMessage가 null로 반환됩니다
                     - 영업시간 데이터가 없는 장소는 isOpen, businessStatusMessage가 null로 반환됩니다
                     """)
 @ApiResponses({

@@ -27,8 +27,9 @@ import java.lang.annotation.Target;
                     ### 알고리즘
                     1. 모든 참가자의 출발지 좌표로 **무게중심(centroid)** 계산 (PostGIS)
                     2. 무게중심 반경 5km 내 **지하철역 최대 10개** 탐색
-                    3. Google Distance Matrix API로 각 역까지의 **대중교통/자가용 이동시간** 평가
-                    4. 평균 대중교통 이동시간 기준 **상위 3개역** 추천
+                    3. MapGlot Route API로 후보역별 **자동차 이동시간**을 계산해 평가 대상을 좁힘
+                    4. ODsay API로 정제 후보역의 **대중교통 이동시간** 평가
+                    5. 평균 대중교통 이동시간 기준 **상위 3개역** 추천
 
                     ### 테스트용 더미 데이터
                     | meetingId | 시나리오 | 출발지 |
@@ -45,8 +46,8 @@ import java.lang.annotation.Target;
                     ### 주의사항
                     - 출발지가 2개 이상 등록되어야 합니다
                     - 반경 5km 내 지하철역이 없으면 404 응답
-                    - Google API 장애 시 500 응답
-                    - `departureTime`은 미래 시각이어야 합니다 (Google API 제약)
+                    - ODsay 대중교통 경로가 모두 실패하면 500 응답
+                    - `departureTime`은 응답에 보존되며, 현재 추천 계산은 실시간 ODsay/MapGlot 호출 기준으로 처리됩니다.
                     """)
 @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -225,11 +226,11 @@ import java.lang.annotation.Target;
                         mediaType = "application/json",
                         examples = @ExampleObject(
                                 name = "API 오류",
-                                summary = "Google Distance Matrix API 호출 실패",
+                                summary = "ODsay 대중교통 경로 조회 실패",
                                 value = """
                                             {
-                                              "code": "E418",
-                                              "message": "외부 API 호출에 실패했습니다."
+                                              "code": "E423",
+                                              "message": "대중교통 경로 조회에 실패했습니다."
                                             }
                                             """
                         )

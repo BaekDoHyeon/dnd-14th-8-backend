@@ -28,9 +28,9 @@ odsay:
   api:
     key: ${ODSAY_API_KEY}
 
-google:
+mapglot:
   api:
-    key: ${GOOGLE_API_KEY}
+    key: ${MAPGLOT_API_KEY}
 
 logging:
   file:

@@ -32,6 +32,6 @@ odsay:
   api:
     key: test-odsay-api-key
 
-google:
+mapglot:
   api:
-    key: test-google-api-key
+    key: test-mapglot-api-key

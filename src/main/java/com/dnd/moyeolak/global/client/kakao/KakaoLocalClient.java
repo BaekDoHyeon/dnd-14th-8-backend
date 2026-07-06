@@ -91,8 +91,7 @@ public class KakaoLocalClient {
     }
 
     /**
-     * 키워드를 사용하여 장소 검색 기능
-     * - Google Places API 호출하여 나온 장소가 현재 한국지도에 실제 있는 장소인지 검증하는 용도.
+     * 키워드를 사용하여 장소를 검색한다.
      */
     public CategorySearchResponse searchByKeyword(KakaoKeywordSearchRequest request) {
         UriComponentsBuilder builder = UriComponentsBuilder
