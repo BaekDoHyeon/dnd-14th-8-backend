@@ -18,7 +18,7 @@ import java.util.List;
         indexes = @Index(name = "idx_base_coords", columnList = "baseLatitude, baseLongitude"),
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_base_place",
-                columnNames = {"baseLatitude", "baseLongitude", "googlePlaceId"}
+                columnNames = {"baseLatitude", "baseLongitude", "providerPlaceId"}
         )
 )
 public class NearbyPlace extends BaseEntity {
@@ -38,8 +38,8 @@ public class NearbyPlace extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private PlaceCategory category;
 
-    @Column(comment = "Google Place ID", nullable = false, length = 300)
-    private String googlePlaceId;
+    @Column(comment = "외부 장소 제공자 ID", nullable = false, length = 300)
+    private String providerPlaceId;
 
     @Column(comment = "장소명", nullable = false)
     private String name;
@@ -71,7 +71,7 @@ public class NearbyPlace extends BaseEntity {
             BigDecimal baseLatitude,
             BigDecimal baseLongitude,
             PlaceCategory category,
-            String googlePlaceId,
+            String providerPlaceId,
             String name,
             String formattedAddress,
             BigDecimal latitude,
@@ -83,7 +83,7 @@ public class NearbyPlace extends BaseEntity {
                 .baseLatitude(baseLatitude)
                 .baseLongitude(baseLongitude)
                 .category(category)
-                .googlePlaceId(googlePlaceId)
+                .providerPlaceId(providerPlaceId)
                 .name(name)
                 .formattedAddress(formattedAddress)
                 .latitude(latitude)

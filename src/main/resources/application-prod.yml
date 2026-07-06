@@ -31,8 +31,6 @@ odsay:
 google:
   api:
     key: ${GOOGLE_API_KEY}
-  places:
-    api-key: ${GOOGLE_PLACES_API_KEY}
 
 logging:
   file:

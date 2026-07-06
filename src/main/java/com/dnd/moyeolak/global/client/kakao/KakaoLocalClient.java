@@ -109,6 +109,9 @@ public class KakaoLocalClient {
         if (request.sort() != null) {
             builder.queryParam("sort", request.sort());
         }
+        if (request.size() != null) {
+            builder.queryParam("size", request.size());
+        }
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "KakaoAK " + kakaoApiConfig.getKakaoApiKey());
