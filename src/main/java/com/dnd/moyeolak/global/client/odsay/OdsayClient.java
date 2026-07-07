@@ -52,7 +52,8 @@ public class OdsayClient {
             .build()
             .toUriString();
 
-        log.debug("ODsay API 요청 URL: {}", url);
+        log.debug("ODsay API 요청: startLat={}, startLng={}, endLat={}, endLng={}",
+            startLat, startLng, endLat, endLng);
 
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {

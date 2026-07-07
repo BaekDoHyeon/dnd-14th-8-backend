@@ -2,6 +2,7 @@ package com.dnd.moyeolak.global.config;
 
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.boot.jpa.EntityManagerFactoryBuilder;
@@ -22,6 +23,12 @@ import java.util.Map;
         transactionManagerRef = "secondaryTransactionManager"
 )
 public class SecondaryDatasourceConfig {
+
+    @Value("${spring.jpa.show-sql:false}")
+    private boolean showSql;
+
+    @Value("${spring.jpa.properties.hibernate.format_sql:false}")
+    private boolean formatSql;
 
     @Bean
     @ConfigurationProperties("spring.datasource.secondary")
@@ -47,8 +54,8 @@ public class SecondaryDatasourceConfig {
                 .persistenceUnit("secondary")
                 .properties(Map.of(
                         "hibernate.hbm2ddl.auto", "none",
-                        "hibernate.show_sql", "true",
-                        "hibernate.format_sql", "true"
+                        "hibernate.show_sql", showSql,
+                        "hibernate.format_sql", formatSql
                 ))
                 .build();
     }

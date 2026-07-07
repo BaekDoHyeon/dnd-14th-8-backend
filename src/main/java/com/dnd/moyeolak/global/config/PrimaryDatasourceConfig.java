@@ -1,6 +1,7 @@
 package com.dnd.moyeolak.global.config;
 
 import jakarta.persistence.EntityManagerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
@@ -13,8 +14,6 @@ import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-
-import org.springframework.beans.factory.annotation.Value;
 
 import javax.sql.DataSource;
 import java.util.Map;
@@ -30,6 +29,12 @@ public class PrimaryDatasourceConfig {
 
     @Value("${spring.jpa.primary.ddl-auto:none}")
     private String ddlAuto;
+
+    @Value("${spring.jpa.show-sql:false}")
+    private boolean showSql;
+
+    @Value("${spring.jpa.properties.hibernate.format_sql:false}")
+    private boolean formatSql;
 
     @Primary
     @Bean
@@ -58,8 +63,8 @@ public class PrimaryDatasourceConfig {
                 .persistenceUnit("primary")
                 .properties(Map.of(
                         "hibernate.hbm2ddl.auto", ddlAuto,
-                        "hibernate.show_sql", "true",
-                        "hibernate.format_sql", "true"
+                        "hibernate.show_sql", showSql,
+                        "hibernate.format_sql", formatSql
                 ))
                 .build();
     }

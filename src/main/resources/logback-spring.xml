@@ -2,9 +2,12 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
+    <property name="APP_LOG_PATTERN"
+              value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [%X{requestId:-no-request}] %logger{36} - %msg%n"/>
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <pattern>${APP_LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
@@ -18,18 +21,18 @@
                     <pattern>application=moyeolak,level=%level</pattern>
                 </label>
                 <message>
-                    <pattern>${FILE_LOG_PATTERN}</pattern>
+                    <pattern>${APP_LOG_PATTERN}</pattern>
                 </message>
             </format>
         </appender>
-        <root level="INFO">
+        <root level="${LOG_LEVEL_ROOT:-INFO}">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="LOKI"/>
         </root>
     </springProfile>
 
     <springProfile name="!loki">
-        <root level="INFO">
+        <root level="${LOG_LEVEL_ROOT:-INFO}">
             <appender-ref ref="CONSOLE"/>
         </root>
     </springProfile>

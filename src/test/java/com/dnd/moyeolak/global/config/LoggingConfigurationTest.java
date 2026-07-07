@@ -25,6 +25,15 @@ class LoggingConfigurationTest {
         assertThat(springProfile.getAttribute("name")).isEqualTo("loki");
     }
 
+    @Test
+    @DisplayName("로그 패턴은 MDC requestId를 포함한다")
+    void shouldIncludeRequestIdInLogPattern() throws Exception {
+        Document document = loadLogbackConfiguration();
+        Element patternProperty = findPropertyByName(document, "APP_LOG_PATTERN");
+
+        assertThat(patternProperty.getAttribute("value")).contains("%X{requestId:-no-request}");
+    }
+
     private Document loadLogbackConfiguration() throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -46,5 +55,18 @@ class LoggingConfigurationTest {
         }
 
         throw new AssertionError("Appender not found: " + name);
+    }
+
+    private Element findPropertyByName(Document document, String name) {
+        NodeList properties = document.getElementsByTagName("property");
+
+        for (int i = 0; i < properties.getLength(); i++) {
+            Node node = properties.item(i);
+            if (node instanceof Element property && name.equals(property.getAttribute("name"))) {
+                return property;
+            }
+        }
+
+        throw new AssertionError("Property not found: " + name);
     }
 }
