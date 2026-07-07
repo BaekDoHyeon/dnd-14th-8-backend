@@ -36,6 +36,7 @@ services:
       JPA_DDL_AUTO: ${JPA_DDL_AUTO:-none}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      ODSAY_API_KEY: ${ODSAY_API_KEY}
       SWAGGER_SERVER_URL: ${SWAGGER_SERVER_URL}
       # 2GB 인스턴스에서 힙 폭주 방지
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0"

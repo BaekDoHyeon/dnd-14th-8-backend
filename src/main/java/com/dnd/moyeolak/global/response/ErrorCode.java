@@ -31,6 +31,7 @@ public enum ErrorCode {
     MEETING_EDIT_FORBIDDEN("E420", "모임 수정 권한이 없습니다.", HttpStatus.FORBIDDEN),
     PARTICIPANT_COUNT_BELOW_CURRENT("E421", "현재 참여 인원보다 적은 수로 변경할 수 없습니다.", HttpStatus.BAD_REQUEST),
     STATION_NOT_FOUND("E422", "지정한 역을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+    ODSAY_API_ERROR("E423", "대중교통 경로 조회에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
     KAKAO_API_ERROR("E424", "자동차 경로 조회에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
     INSUFFICIENT_LOCATION_VOTES("E425", "출발지 2개 이상 등록 시 중간지점을 확인할 수 있습니다.", HttpStatus.BAD_REQUEST),
     INVALID_TIME_RANGE("E426", "시작 시간은 종료 시간보다 빨라야 합니다.", HttpStatus.BAD_REQUEST),

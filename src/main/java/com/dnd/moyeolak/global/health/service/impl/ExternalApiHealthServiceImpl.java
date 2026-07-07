@@ -7,6 +7,8 @@ import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
 import com.dnd.moyeolak.global.client.kakao.KakaoLocalClient;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
 import com.dnd.moyeolak.global.client.kakao.dto.SubwayStation;
+import com.dnd.moyeolak.global.client.odsay.OdsayClient;
+import com.dnd.moyeolak.global.client.odsay.dto.OdsayPathInfo;
 import com.dnd.moyeolak.global.health.dto.ExternalApiHealthResponse;
 import com.dnd.moyeolak.global.health.dto.ExternalApiHealthResponse.ApiCheckResult;
 import com.dnd.moyeolak.global.health.service.ExternalApiHealthService;
@@ -33,16 +35,20 @@ public class ExternalApiHealthServiceImpl implements ExternalApiHealthService {
     private static final double GANGNAM_STATION_LAT = 37.4979;
     private static final double GANGNAM_STATION_LNG = 127.0276;
 
+    private static final int ODSAY_FAILURE_SENTINEL = 999;
+
     private final KakaoLocalClient kakaoLocalClient;
     private final KakaoDirectionsClient kakaoDirectionsClient;
     private final GoogleRoutesClient googleRoutesClient;
+    private final OdsayClient odsayClient;
 
     @Override
     public ExternalApiHealthResponse checkExternalApis() {
         List<ApiCheckResult> results = List.of(
                 check("Kakao Local", this::checkKakaoLocal),
                 check("Kakao Directions", this::checkKakaoDirections),
-                check("Google Routes", this::checkGoogleRoutes)
+                check("Google Routes", this::checkGoogleRoutes),
+                check("ODsay", this::checkOdsay)
         );
         return ExternalApiHealthResponse.from(results);
     }
@@ -86,5 +92,14 @@ public class ExternalApiHealthServiceImpl implements ExternalApiHealthService {
                 null
         );
         return "시청→강남역 대중교통 경로 조회 성공: " + detail.durationMinutes() + "분";
+    }
+
+    private String checkOdsay() {
+        OdsayPathInfo pathInfo = odsayClient.searchRoute(
+                CITY_HALL_LAT, CITY_HALL_LNG, GANGNAM_STATION_LAT, GANGNAM_STATION_LNG);
+        if (pathInfo.safeTotal() == ODSAY_FAILURE_SENTINEL) {
+            throw new IllegalStateException("대중교통 경로 응답 없음 (로그에서 원인 확인)");
+        }
+        return "시청→강남역 대중교통 경로 조회 성공: " + pathInfo.safeTotal() + "분";
     }
 }

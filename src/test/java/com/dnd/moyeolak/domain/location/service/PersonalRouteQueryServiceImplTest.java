@@ -1,7 +1,6 @@
 package com.dnd.moyeolak.domain.location.service;
 
 import com.dnd.moyeolak.domain.location.dto.PersonalRouteResponse;
-import com.dnd.moyeolak.domain.location.dto.TransitRouteDetailDto;
 import com.dnd.moyeolak.domain.location.entity.LocationVote;
 import com.dnd.moyeolak.domain.location.enums.RouteMode;
 import com.dnd.moyeolak.domain.location.repository.LocationVoteRepository;
@@ -10,9 +9,10 @@ import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
 import com.dnd.moyeolak.domain.participant.service.ParticipantService;
-import com.dnd.moyeolak.global.client.google.GoogleRoutesClient;
 import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
+import com.dnd.moyeolak.global.client.odsay.OdsayClient;
+import com.dnd.moyeolak.global.client.odsay.dto.OdsayPathInfo;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
@@ -50,7 +50,7 @@ class PersonalRouteQueryServiceImplTest {
     @Mock
     private StationRepository stationRepository;
     @Mock
-    private GoogleRoutesClient googleRoutesClient;
+    private OdsayClient odsayClient;
     @Mock
     private KakaoDirectionsClient kakaoDirectionsClient;
 
@@ -86,8 +86,8 @@ class PersonalRouteQueryServiceImplTest {
                 .thenReturn(Optional.of(vote));
         when(stationRepository.findById(STATION_ID)).thenReturn(Optional.of(station));
 
-        when(googleRoutesClient.computeTransitRoute(any(), any(), any()))
-                .thenReturn(new TransitRouteDetailDto(60, 21400, 1500, 1, 400));
+        OdsayPathInfo pathInfo = new OdsayPathInfo(60, 1500, 1, 1, 10000, 400, 5);
+        when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(pathInfo);
 
         KakaoDirectionsResponse.Fare fare = new KakaoDirectionsResponse.Fare(3000, 20000);
         KakaoDirectionsResponse.Summary summary = new KakaoDirectionsResponse.Summary(12000, 3600, fare);
@@ -110,25 +110,25 @@ class PersonalRouteQueryServiceImplTest {
     }
 
     @Test
-    @DisplayName("대중교통 조회가 실패하면 GOOGLE_API_ERROR를 발생시킨다")
+    @DisplayName("대중교통 조회가 실패하면 ODSAY_API_ERROR를 발생시킨다")
     void throwsWhenTransitFails() {
         setupCommonMocks();
-        when(googleRoutesClient.computeTransitRoute(any(), any(), any()))
-                .thenThrow(new BusinessException(ErrorCode.GOOGLE_API_ERROR));
+        when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0));
 
         assertThatThrownBy(() -> personalRouteQueryService.getPersonalRoute(
                 MEETING_ID, STATION_ID, PARTICIPANT_ID, null, RouteMode.TRANSIT
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GOOGLE_API_ERROR);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ODSAY_API_ERROR);
     }
 
     @Test
     @DisplayName("자동차 조회가 실패하면 KAKAO_API_ERROR를 발생시킨다")
     void throwsWhenDrivingFails() {
         setupCommonMocks();
-        when(googleRoutesClient.computeTransitRoute(any(), any(), any()))
-                .thenReturn(new TransitRouteDetailDto(30, 10000, 1400, 0, 200));
+        when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(new OdsayPathInfo(30, 1000, 0, 0, 5000, 100, 0));
         when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
                 .thenReturn(null);
 

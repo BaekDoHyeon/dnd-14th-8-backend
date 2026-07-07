@@ -28,6 +28,10 @@ google:
   api:
     key: test-google-api-key
 
+odsay:
+  api:
+    key: test-odsay-api-key
+
 kakao:
   api:
     key: test-kakao-api-key

@@ -24,6 +24,10 @@ google:
   api:
     key: ${GOOGLE_API_KEY}
 
+odsay:
+  api:
+    key: ${ODSAY_API_KEY}
+
 kakao:
   api:
     key: ${KAKAO_API_KEY}
@@ -34,6 +38,9 @@ logging:
   level:
     root: warn
     com.dnd.moyeolak: info
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
+    org.hibernate.type.descriptor.sql.BasicBinder: warn
 
 # Actuator & Prometheus
 management:

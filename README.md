@@ -65,7 +65,7 @@ flowchart LR
 
 ### 3. 개인 경로 조회
 
-- **Google Routes API**: 출발지 → 추천 역 대중교통 경로
+- **ODsay 대중교통 API**: 출발지 → 추천 역 대중교통 경로 (요금·환승·도보 상세)
 - **Kakao Directions API**: 자동차 경로 (거리·소요시간)
 - `transit` / `driving` / `both` 모드 선택 가능
 
@@ -94,7 +94,8 @@ flowchart TB
     end
 
     subgraph EXT["External APIs"]
-        Google["Google Routes\n(대중교통 매트릭스)"]
+        Google["Google Routes\n(중간지점 매트릭스)"]
+        Odsay["ODsay\n(개인 경로 대중교통)"]
         Kakao["Kakao Local\n/ Directions"]
         GooglePlaces["Google Places\n(주변 장소)"]
     end
@@ -248,8 +249,8 @@ erDiagram
 
 | API | 용도 |
 |-----|------|
-| Google Routes API (Transit Matrix) | 출발지 → 후보 역 이동시간 행렬 계산 |
-| Google Routes API (Transit Direction) | 개인 경로 조회 (Top 3 역만 보강) |
+| Google Routes API (Transit Matrix) | 출발지 → 후보 역 이동시간 행렬 계산 (중간지점 추천) |
+| ODsay 대중교통 API | 개인 경로 상세 (요금·환승·도보) |
 | Google Places (Nearby Search) | 역 주변 장소 탐색 |
 | Kakao Local | 키워드 장소 검색, 주소 변환 |
 | Kakao Directions | 자동차 경로 (거리·소요시간) |
@@ -334,6 +335,7 @@ com.dnd.moyeolak
 └── global
     ├── client
     │   ├── google     # Google Routes API / Places
+    │   ├── odsay      # ODsay 대중교통 API (개인 경로 상세)
     │   └── kakao      # Kakao Local / Directions
     ├── config         # Swagger, Cache, CORS, DataSource
     ├── exception      # BusinessException, GlobalExceptionAdvice
