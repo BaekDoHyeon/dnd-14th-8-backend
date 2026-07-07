@@ -4,7 +4,7 @@ import com.dnd.moyeolak.global.client.kakao.config.KakaoApiConfig;
 import com.dnd.moyeolak.global.client.kakao.dto.CategorySearchResponse;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoLocalResponse;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoKeywordSearchRequest;
-import com.dnd.moyeolak.test.janghh.dto.response.SubwayStation;
+import com.dnd.moyeolak.global.client.kakao.dto.SubwayStation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;

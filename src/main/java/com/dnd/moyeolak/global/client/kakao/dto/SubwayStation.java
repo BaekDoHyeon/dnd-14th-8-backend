@@ -1,4 +1,4 @@
-package com.dnd.moyeolak.test.janghh.dto.response;
+package com.dnd.moyeolak.global.client.kakao.dto;
 
 public record SubwayStation(
     String name,

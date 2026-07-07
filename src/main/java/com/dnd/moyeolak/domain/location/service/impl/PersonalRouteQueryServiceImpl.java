@@ -9,10 +9,10 @@ import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
 import com.dnd.moyeolak.domain.participant.service.ParticipantService;
+import com.dnd.moyeolak.global.client.google.GoogleRoutesClient;
+import com.dnd.moyeolak.global.client.google.dto.LatLng;
 import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
-import com.dnd.moyeolak.global.client.odsay.OdsayClient;
-import com.dnd.moyeolak.global.client.odsay.dto.OdsayPathInfo;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
@@ -32,7 +32,7 @@ public class PersonalRouteQueryServiceImpl implements PersonalRouteQueryService 
     private final ParticipantService participantService;
     private final LocationVoteRepository locationVoteRepository;
     private final StationRepository stationRepository;
-    private final OdsayClient odsayClient;
+    private final GoogleRoutesClient googleRoutesClient;
     private final KakaoDirectionsClient kakaoDirectionsClient;
 
     @Override
@@ -58,7 +58,7 @@ public class PersonalRouteQueryServiceImpl implements PersonalRouteQueryService 
 
         TransitRouteDetailDto transit = null;
         if (mode.includeTransit()) {
-            transit = buildTransitRoute(locationVote, station);
+            transit = buildTransitRoute(locationVote, station, departureTime);
         }
 
         DrivingRouteDetailDto driving = null;
@@ -83,26 +83,15 @@ public class PersonalRouteQueryServiceImpl implements PersonalRouteQueryService 
         );
     }
 
-    private TransitRouteDetailDto buildTransitRoute(LocationVote vote, Station station) {
-        OdsayPathInfo pathInfo = odsayClient.searchRoute(
-                vote.getDepartureLat().doubleValue(),
-                vote.getDepartureLng().doubleValue(),
-                station.getLatitude(),
-                station.getLongitude()
-        );
-
-        if (pathInfo == null || pathInfo.safeTotal() >= 999) {
-            throw new BusinessException(ErrorCode.ODSAY_API_ERROR);
-        }
-
-        int transferCount = pathInfo.safeBusTransit() + pathInfo.safeSubwayTransit();
-
-        return new TransitRouteDetailDto(
-                pathInfo.safeTotal(),
-                pathInfo.safeTotalDistance(),
-                pathInfo.safePayment(),
-                transferCount,
-                pathInfo.safeTotalWalk()
+    private TransitRouteDetailDto buildTransitRoute(
+            LocationVote vote,
+            Station station,
+            LocalDateTime departureTime
+    ) {
+        return googleRoutesClient.computeTransitRoute(
+                new LatLng(vote.getDepartureLat().doubleValue(), vote.getDepartureLng().doubleValue()),
+                new LatLng(station.getLatitude(), station.getLongitude()),
+                departureTime
         );
     }
 

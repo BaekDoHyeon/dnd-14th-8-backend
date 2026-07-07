@@ -1,4 +1,4 @@
-package com.dnd.moyeolak.global.client.mapglot.config;
+package com.dnd.moyeolak.global.client.google.config;
 
 import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,24 +9,24 @@ import org.springframework.web.client.RestTemplate;
 
 @Configuration
 @NoArgsConstructor
-public class MapGlotApiConfig {
+public class GoogleRoutesApiConfig {
 
-    @Value("${mapglot.api.key}")
-    private String mapGlotApiKey;
+    @Value("${google.api.key}")
+    private String googleApiKey;
 
-    public MapGlotApiConfig(String mapGlotApiKey) {
-        this.mapGlotApiKey = mapGlotApiKey;
+    public GoogleRoutesApiConfig(String googleApiKey) {
+        this.googleApiKey = googleApiKey;
     }
 
-    public String getMapGlotApiKey() {
-        return mapGlotApiKey;
+    public String getGoogleApiKey() {
+        return googleApiKey;
     }
 
-    @Bean("mapGlotRestTemplate")
-    public RestTemplate mapGlotRestTemplate() {
+    @Bean("googleRoutesRestTemplate")
+    public RestTemplate googleRoutesRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
-        factory.setReadTimeout(10000);
+        factory.setReadTimeout(15000);
         return new RestTemplate(factory);
     }
 }

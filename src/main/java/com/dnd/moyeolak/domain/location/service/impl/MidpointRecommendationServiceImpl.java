@@ -7,7 +7,10 @@ import com.dnd.moyeolak.domain.location.repository.LocationVoteRepository;
 import com.dnd.moyeolak.domain.location.service.MidpointRecommendationService;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
-import com.dnd.moyeolak.global.client.mapglot.MapGlotRouteClient;
+import com.dnd.moyeolak.global.client.google.GoogleRoutesClient;
+import com.dnd.moyeolak.global.client.google.dto.LatLng;
+import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
+import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
@@ -36,15 +39,14 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
     private final MeetingService meetingService;
     private final LocationVoteRepository locationVoteRepository;
     private final StationRepository stationRepository;
-    private final MapGlotRouteClient mapGlotRouteClient;
-    private final OdsayTransitRouteClient odsayTransitRouteClient;
+    private final GoogleRoutesClient googleRoutesClient;
+    private final KakaoDirectionsClient kakaoDirectionsClient;
 
     private static final int SEARCH_RADIUS_METERS = 5000;
     private static final int MAX_CANDIDATE_STATIONS = 10;
-    private static final int REFINED_CANDIDATE_STATIONS = 5;
     private static final int TOP_RECOMMENDATIONS = 3;
-    // OdsayClient의 Semaphore 허용치(5)에 맞춘 병렬도 — 더 늘려도 세마포어에서 대기만 한다
-    private static final int TRANSIT_EVALUATION_THREADS = 5;
+    // KakaoDirectionsClient의 Semaphore 허용치(5)에 맞춘 병렬도 — 더 늘려도 세마포어에서 대기만 한다
+    private static final int DRIVING_ENRICHMENT_THREADS = 5;
 
     @Override
     @Cacheable(value = "midpointRecommendations", key = "#meetingId + '_' + #departureTime")
@@ -80,11 +82,22 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         }
         log.info("후보 지하철역 {}개 검색 완료", candidateStations.size());
 
-        // 4. MapGlot driving 결과로 ODsay 정밀 평가 후보를 줄인다.
-        List<StationDrivingCandidate> refinedCandidates = selectDrivingCandidates(votes, candidateStations, centerPoint);
+        // 4. Google 매트릭스 1회로 전 후보역의 대중교통 시간 계산
+        List<List<TransitRouteResult>> transitMatrix = googleRoutesClient.computeTransitMatrix(
+                votes.stream()
+                        .map(v -> new LatLng(v.getDepartureLat().doubleValue(), v.getDepartureLng().doubleValue()))
+                        .toList(),
+                candidateStations.stream()
+                        .map(s -> new LatLng(s.getLatitude(), s.getLongitude()))
+                        .toList(),
+                departureTime
+        );
 
-        // 5. ODsay 대중교통 결과로 최종 순위를 산정한다.
-        List<StationRecommendationDto> recommendations = evaluateStations(votes, refinedCandidates, centerPoint);
+        // 5. 평균 대중교통 시간으로 Top 3 선정
+        List<StationEvaluation> topStations = selectTopStations(votes, candidateStations, transitMatrix, centerPoint);
+
+        // 6. Top 3에만 Kakao 자동차 경로 보강 후 응답 조립
+        List<StationRecommendationDto> recommendations = buildRecommendations(votes, topStations, departureTime);
 
         return new MidpointRecommendationResponse(
                 centerPoint, recommendations, departureTime,
@@ -123,147 +136,114 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         return new CenterPointDto(avgLat, avgLng);
     }
 
-    private List<StationDrivingCandidate> selectDrivingCandidates(
+    private List<StationEvaluation> selectTopStations(
             List<LocationVote> votes,
             List<Station> stations,
+            List<List<TransitRouteResult>> transitMatrix,
             CenterPointDto centerPoint
     ) {
-        List<StationDrivingCandidate> candidates = new ArrayList<>();
+        List<StationEvaluation> evaluations = new ArrayList<>();
 
-        for (Station station : stations) {
-            List<DrivingRouteResult> drivingRoutes = votes.stream()
-                    .map(vote -> mapGlotRouteClient.calculateDriving(
-                            vote.getDepartureLat().doubleValue(),
-                            vote.getDepartureLng().doubleValue(),
-                            station.getLatitude(),
-                            station.getLongitude()
-                    ))
+        for (int stationIdx = 0; stationIdx < stations.size(); stationIdx++) {
+            Station station = stations.get(stationIdx);
+            List<TransitRouteResult> transitRoutes = new ArrayList<>();
+            for (int voteIdx = 0; voteIdx < votes.size(); voteIdx++) {
+                transitRoutes.add(transitMatrix.get(voteIdx).get(stationIdx));
+            }
+
+            List<TransitRouteResult> reachableRoutes = transitRoutes.stream()
+                    .filter(TransitRouteResult::reachable)
                     .toList();
+            if (reachableRoutes.isEmpty()) {
+                continue;
+            }
 
+            double avgTransitDuration = reachableRoutes.stream()
+                    .mapToInt(TransitRouteResult::durationMinutes)
+                    .average()
+                    .orElse(Double.MAX_VALUE);
             int distanceFromCenter = haversineDistance(
                     centerPoint.latitude(), centerPoint.longitude(),
                     station.getLatitude(), station.getLongitude()
             );
-            candidates.add(new StationDrivingCandidate(station, drivingRoutes, distanceFromCenter));
+
+            evaluations.add(new StationEvaluation(
+                    station,
+                    transitRoutes,
+                    avgTransitDuration,
+                    transitRoutes.size() - reachableRoutes.size(),
+                    distanceFromCenter
+            ));
         }
 
-        boolean hasReachableDrivingRoute = candidates.stream()
-                .flatMap(candidate -> candidate.drivingRoutes().stream())
-                .anyMatch(DrivingRouteResult::reachable);
-
-        Comparator<StationDrivingCandidate> comparator = hasReachableDrivingRoute
-                ? Comparator.comparingDouble(StationDrivingCandidate::avgDrivingDuration)
-                    .thenComparingInt(StationDrivingCandidate::unreachableDrivingRouteCount)
-                    .thenComparingInt(StationDrivingCandidate::distanceFromCenter)
-                : Comparator.comparingInt(StationDrivingCandidate::distanceFromCenter);
-
-        return candidates.stream()
-                .sorted(comparator)
-                .limit(REFINED_CANDIDATE_STATIONS)
-                .toList();
-    }
-
-    private List<StationRecommendationDto> evaluateStations(
-            List<LocationVote> votes,
-            List<StationDrivingCandidate> candidates,
-            CenterPointDto centerPoint
-    ) {
-        List<List<TransitRouteResult>> transitResults = calculateTransitRoutes(votes, candidates);
-
-        List<EvaluatedStation> results = new ArrayList<>();
-
-        for (int candidateIdx = 0; candidateIdx < candidates.size(); candidateIdx++) {
-            StationDrivingCandidate candidate = candidates.get(candidateIdx);
-            Station station = candidate.station();
-            List<RouteDto> routes = new ArrayList<>();
-            int unreachableTransitRouteCount = 0;
-            int reachableTransitDurationSum = 0;
-            int reachableTransitRouteCount = 0;
-
-            for (int voteIdx = 0; voteIdx < votes.size(); voteIdx++) {
-                LocationVote vote = votes.get(voteIdx);
-                TransitRouteResult transitRoute = transitResults.get(candidateIdx).get(voteIdx);
-                DrivingRouteResult drivingRoute = candidate.drivingRouteAt(voteIdx);
-
-                if (transitRoute.reachable()) {
-                    reachableTransitDurationSum += transitRoute.durationMinutes();
-                    reachableTransitRouteCount++;
-                } else {
-                    unreachableTransitRouteCount++;
-                }
-
-                String departureName = resolveDepartureName(vote);
-
-                Long participantId = vote.getParticipant() != null ? vote.getParticipant().getId() : null;
-
-                routes.add(RouteDto.builder()
-                        .participantId(participantId)
-                        .departureName(departureName)
-                        .departureAddress(vote.getDepartureLocation())
-                        .transitDuration(transitRoute.durationMinutes())
-                        .transitDistance(transitRoute.distanceMeters())
-                        .drivingDuration(drivingRoute.durationSeconds() / 60)
-                        .drivingDistance(drivingRoute.distanceMeters())
-                        .build());
-            }
-
-            if (reachableTransitRouteCount == 0) {
-                continue;
-            }
-
-            double avgTransitDuration = (double) reachableTransitDurationSum / reachableTransitRouteCount;
-
-            StationRecommendationDto recommendation = StationRecommendationDto.builder()
-                .rank(0)
-                .stationId(station.getId())
-                .stationName(station.getName())
-                .line(station.getLine())
-                .latitude(station.getLatitude())
-                .longitude(station.getLongitude())
-                .distanceFromCenter(candidate.distanceFromCenter())
-                .avgTransitDuration(avgTransitDuration)
-                .routes(routes)
-                .build();
-            results.add(new EvaluatedStation(recommendation, unreachableTransitRouteCount));
+        if (evaluations.isEmpty()) {
+            throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
         }
 
-        if (results.isEmpty()) {
-            throw new BusinessException(ErrorCode.ODSAY_API_ERROR);
-        }
-
-        // avgTransitDuration 오름차순 정렬 → Top 3 선정 → 순위 부여
-        List<EvaluatedStation> sorted = results.stream()
-                .sorted(Comparator.comparingDouble((EvaluatedStation result) -> result.recommendation().avgTransitDuration())
-                        .thenComparingInt(EvaluatedStation::unreachableTransitRouteCount)
-                        .thenComparingInt(result -> result.recommendation().distanceFromCenter()))
+        return evaluations.stream()
+                .sorted(Comparator.comparingDouble(StationEvaluation::avgTransitDuration)
+                        .thenComparingInt(StationEvaluation::unreachableTransitRouteCount)
+                        .thenComparingInt(StationEvaluation::distanceFromCenter))
                 .limit(TOP_RECOMMENDATIONS)
                 .toList();
+    }
 
-        return IntStream.range(0, sorted.size())
-                .mapToObj(i -> StationRecommendationDto.builder()
-                        .rank(i + 1)
-                        .stationId(sorted.get(i).recommendation().stationId())
-                        .stationName(sorted.get(i).recommendation().stationName())
-                        .line(sorted.get(i).recommendation().line())
-                        .latitude(sorted.get(i).recommendation().latitude())
-                        .longitude(sorted.get(i).recommendation().longitude())
-                        .distanceFromCenter(sorted.get(i).recommendation().distanceFromCenter())
-                        .avgTransitDuration(sorted.get(i).recommendation().avgTransitDuration())
-                        .routes(sorted.get(i).recommendation().routes())
-                        .build())
+    private List<StationRecommendationDto> buildRecommendations(
+            List<LocationVote> votes,
+            List<StationEvaluation> topStations,
+            LocalDateTime departureTime
+    ) {
+        List<List<DrivingRouteResult>> drivingRoutes = calculateDrivingRoutes(votes, topStations, departureTime);
+
+        return IntStream.range(0, topStations.size())
+                .mapToObj(rank -> {
+                    StationEvaluation evaluation = topStations.get(rank);
+                    Station station = evaluation.station();
+                    List<RouteDto> routes = new ArrayList<>();
+
+                    for (int voteIdx = 0; voteIdx < votes.size(); voteIdx++) {
+                        LocationVote vote = votes.get(voteIdx);
+                        TransitRouteResult transitRoute = evaluation.transitRoutes().get(voteIdx);
+                        DrivingRouteResult drivingRoute = drivingRoutes.get(rank).get(voteIdx);
+                        Long participantId = vote.getParticipant() != null ? vote.getParticipant().getId() : null;
+
+                        routes.add(RouteDto.builder()
+                                .participantId(participantId)
+                                .departureName(resolveDepartureName(vote))
+                                .departureAddress(vote.getDepartureLocation())
+                                .transitDuration(transitRoute.durationMinutes())
+                                .transitDistance(transitRoute.distanceMeters())
+                                .drivingDuration(drivingRoute.durationSeconds() / 60)
+                                .drivingDistance(drivingRoute.distanceMeters())
+                                .build());
+                    }
+
+                    return StationRecommendationDto.builder()
+                            .rank(rank + 1)
+                            .stationId(station.getId())
+                            .stationName(station.getName())
+                            .line(station.getLine())
+                            .latitude(station.getLatitude())
+                            .longitude(station.getLongitude())
+                            .distanceFromCenter(evaluation.distanceFromCenter())
+                            .avgTransitDuration(evaluation.avgTransitDuration())
+                            .routes(routes)
+                            .build();
+                })
                 .toList();
     }
 
-    private List<List<TransitRouteResult>> calculateTransitRoutes(
+    private List<List<DrivingRouteResult>> calculateDrivingRoutes(
             List<LocationVote> votes,
-            List<StationDrivingCandidate> candidates
+            List<StationEvaluation> topStations,
+            LocalDateTime departureTime
     ) {
-        ExecutorService executor = Executors.newFixedThreadPool(TRANSIT_EVALUATION_THREADS);
+        ExecutorService executor = Executors.newFixedThreadPool(DRIVING_ENRICHMENT_THREADS);
         try {
-            List<List<CompletableFuture<TransitRouteResult>>> futures = candidates.stream()
-                    .map(candidate -> votes.stream()
+            List<List<CompletableFuture<DrivingRouteResult>>> futures = topStations.stream()
+                    .map(evaluation -> votes.stream()
                             .map(vote -> CompletableFuture.supplyAsync(
-                                    () -> odsayTransitRouteClient.calculate(vote, candidate.station()),
+                                    () -> requestDrivingRoute(vote, evaluation.station(), departureTime),
                                     executor))
                             .toList())
                     .toList();
@@ -276,6 +256,20 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         } finally {
             executor.shutdown();
         }
+    }
+
+    private DrivingRouteResult requestDrivingRoute(LocationVote vote, Station station, LocalDateTime departureTime) {
+        KakaoDirectionsResponse.Summary summary = kakaoDirectionsClient.requestDrivingRoute(
+                vote.getDepartureLat().doubleValue(),
+                vote.getDepartureLng().doubleValue(),
+                station.getLatitude(),
+                station.getLongitude(),
+                departureTime
+        );
+        if (summary == null) {
+            return DrivingRouteResult.unreachable();
+        }
+        return new DrivingRouteResult(summary.duration(), summary.distance(), true);
     }
 
     private String resolveDepartureName(LocationVote vote) {
@@ -303,36 +297,11 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         return (int) (R * c);
     }
 
-    private record StationDrivingCandidate(
+    private record StationEvaluation(
             Station station,
-            List<DrivingRouteResult> drivingRoutes,
+            List<TransitRouteResult> transitRoutes,
+            double avgTransitDuration,
+            int unreachableTransitRouteCount,
             int distanceFromCenter
-    ) {
-
-        private double avgDrivingDuration() {
-            return drivingRoutes.stream()
-                    .filter(DrivingRouteResult::reachable)
-                    .mapToInt(DrivingRouteResult::durationSeconds)
-                    .average()
-                    .orElse(Double.MAX_VALUE);
-        }
-
-        private int unreachableDrivingRouteCount() {
-            return (int) drivingRoutes.stream()
-                    .filter(route -> !route.reachable())
-                    .count();
-        }
-
-        private DrivingRouteResult drivingRouteAt(int index) {
-            if (index >= drivingRoutes.size()) {
-                return DrivingRouteResult.unreachable();
-            }
-            return drivingRoutes.get(index);
-        }
-    }
-
-    private record EvaluatedStation(
-            StationRecommendationDto recommendation,
-            int unreachableTransitRouteCount
     ) {}
 }

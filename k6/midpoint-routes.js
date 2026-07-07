@@ -1,11 +1,11 @@
 /**
  * GET /api/locations/midpoint-routes 성능 테스트
  *
- * mode 파라미터별로 분리 측정 → ODsay vs Kakao 병목 파악 가능
+ * mode 파라미터별로 분리 측정 → Google Routes vs Kakao 병목 파악 가능
  *
  * 실행 예시:
  *   k6 run k6/midpoint-routes.js                             # both + load (기본)
- *   k6 run -e MODE=transit  k6/midpoint-routes.js            # ODsay만
+ *   k6 run -e MODE=transit  k6/midpoint-routes.js            # Google Routes만
  *   k6 run -e MODE=driving  k6/midpoint-routes.js            # Kakao만
  *   k6 run -e SCENARIO=smoke k6/midpoint-routes.js           # smoke
  *   k6 run -e PARTICIPANT_ID=2 k6/midpoint-routes.js         # 다른 참여자
@@ -40,7 +40,7 @@ const errorRate       = new Rate('error_rate');
 export const options = {
     stages: STAGES[SCENARIO],
     thresholds: {
-        // transit: ODsay API 포함 (Semaphore(5) 대기 시간 있음)
+        // transit: Google Routes API (매트릭스 1회 + Top 3 Kakao 보강)
         transit_duration_ms: ['p(95)<8000'],
         // driving: Kakao Directions API (응답 빠름)
         driving_duration_ms: ['p(95)<5000'],
@@ -135,7 +135,7 @@ export default function () {
         }
     });
 
-    // transit은 Semaphore(5) 대기가 있으므로 sleep을 줄여 경쟁 상황 유도
+    // transit은 Google Routes 대기가 있을 수 있으므로 sleep을 줄여 경쟁 상황 유도
     sleep(MODE === 'transit' ? 0.5 : 1);
 }
 
@@ -168,7 +168,7 @@ export function handleSummary(data) {
   mode별 p95
   ${modeMetric}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  [참고] transit p95 > driving p95 이면 ODsay Semaphore(5) 대기가 병목
+  [참고] transit p95 > driving p95 이면 Google Routes API 대기가 병목
   [참고] both p95 ≈ transit p95 + driving p95 이면 순차 호출 정상 동작
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;

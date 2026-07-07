@@ -1,6 +1,5 @@
 package com.dnd.moyeolak.domain.location.service;
 
-import com.dnd.moyeolak.domain.location.dto.DrivingRouteResult;
 import com.dnd.moyeolak.domain.location.dto.MidpointRecommendationResponse;
 import com.dnd.moyeolak.domain.location.dto.ParticipantCountDto;
 import com.dnd.moyeolak.domain.location.dto.StationRecommendationDto;
@@ -9,11 +8,12 @@ import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.location.entity.LocationVote;
 import com.dnd.moyeolak.domain.location.repository.LocationVoteRepository;
 import com.dnd.moyeolak.domain.location.service.impl.MidpointRecommendationServiceImpl;
-import com.dnd.moyeolak.domain.location.service.impl.OdsayTransitRouteClient;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
-import com.dnd.moyeolak.global.client.mapglot.MapGlotRouteClient;
+import com.dnd.moyeolak.global.client.google.GoogleRoutesClient;
+import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
+import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
@@ -35,10 +35,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,10 +56,10 @@ class MidpointRecommendationServiceImplTest {
     private StationRepository stationRepository;
 
     @Mock
-    private MapGlotRouteClient mapGlotRouteClient;
+    private GoogleRoutesClient googleRoutesClient;
 
     @Mock
-    private OdsayTransitRouteClient odsayTransitRouteClient;
+    private KakaoDirectionsClient kakaoDirectionsClient;
 
     @InjectMocks
     private MidpointRecommendationServiceImpl midpointRecommendationService;
@@ -105,7 +106,7 @@ class MidpointRecommendationServiceImplTest {
         @Test
         @DisplayName("근처 지하철역이 없으면 NO_NEARBY_STATIONS 예외가 발생한다")
         void throwsWhenNoNearbyStations() {
-            Meeting meeting = mockMeetingWithLocationPoll();
+            mockMeetingWithLocationPoll();
             LocationVote vote1 = createMockVote("37.5000", "127.0000", "테스터", "서울시 강남구");
             LocationVote vote2 = createMockVote("37.5100", "127.0100", "테스터2", "서울시 송파구");
             when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
@@ -119,8 +120,8 @@ class MidpointRecommendationServiceImplTest {
         }
 
         @Test
-        @DisplayName("모든 후보역의 ODsay 경로가 실패하면 ODSAY_API_ERROR 예외가 발생한다")
-        void throwsWhenAllOdsayRoutesFail() {
+        @DisplayName("모든 후보역이 전원 도달 불가이면 GOOGLE_API_ERROR 예외가 발생한다")
+        void throwsWhenAllTransitRoutesUnreachable() {
             mockMeetingWithLocationPoll();
             LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
             LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
@@ -129,14 +130,15 @@ class MidpointRecommendationServiceImplTest {
             Station station = createMockStation(1L, "강남역", "2호선", 37.4979, 127.0276);
             when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
                     .thenReturn(List.of(station));
-            when(mapGlotRouteClient.calculateDriving(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
-                    .thenReturn(new DrivingRouteResult(900, 8000, true));
-            when(odsayTransitRouteClient.calculate(any(LocationVote.class), any(Station.class)))
-                    .thenReturn(TransitRouteResult.unreachable());
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(TransitRouteResult.unreachable()),
+                            List.of(TransitRouteResult.unreachable())
+                    ));
 
             assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
                     .isInstanceOf(BusinessException.class)
-                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ODSAY_API_ERROR);
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GOOGLE_API_ERROR);
         }
     }
 
@@ -145,8 +147,8 @@ class MidpointRecommendationServiceImplTest {
     class SuccessCases {
 
         @Test
-        @DisplayName("MapGlot driving 정보를 응답에 반영하되 최종 순위는 ODsay transit 기준으로 결정한다")
-        void ranksByOdsayTransitAndKeepsMapGlotDrivingDetails() {
+        @DisplayName("Google 매트릭스 기준으로 순위를 매기고 Kakao 자동차 경로를 응답에 반영한다")
+        void ranksByGoogleTransitAndEnrichesWithKakaoDriving() {
             Meeting meeting = mockMeetingWithLocationPoll();
             when(meeting.getParticipantCount()).thenReturn(4);
             LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
@@ -159,15 +161,14 @@ class MidpointRecommendationServiceImplTest {
             when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
                     .thenReturn(List.of(station1, station2));
 
-            when(mapGlotRouteClient.calculateDriving(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
-                    .thenReturn(new DrivingRouteResult(1800, 12000, true))
-                    .thenReturn(new DrivingRouteResult(1800, 12000, true))
-                    .thenReturn(new DrivingRouteResult(600, 4000, true))
-                    .thenReturn(new DrivingRouteResult(600, 4000, true));
-            when(odsayTransitRouteClient.calculate(vote1, station1)).thenReturn(new TransitRouteResult(20, 9000, true));
-            when(odsayTransitRouteClient.calculate(vote2, station1)).thenReturn(new TransitRouteResult(30, 10000, true));
-            when(odsayTransitRouteClient.calculate(vote1, station2)).thenReturn(new TransitRouteResult(70, 14000, true));
-            when(odsayTransitRouteClient.calculate(vote2, station2)).thenReturn(new TransitRouteResult(80, 15000, true));
+            // matrix[voteIdx][stationIdx]: 합정역 평균 25분 < 강남역 평균 75분
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(20, 9000, true), new TransitRouteResult(70, 14000, true)),
+                            List.of(new TransitRouteResult(30, 10000, true), new TransitRouteResult(80, 15000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(12000, 1800, null));
 
             MidpointRecommendationResponse response =
                     midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
@@ -188,6 +189,75 @@ class MidpointRecommendationServiceImplTest {
         }
 
         @Test
+        @DisplayName("Top 3를 초과하는 후보역은 제외하고 Kakao 호출도 Top 3에만 수행한다")
+        void limitsRecommendationsToTopThreeAndEnrichesOnlyThose() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            List<Station> stations = List.of(
+                    createMockStation(1L, "역1", "1호선", 37.50, 127.01),
+                    createMockStation(2L, "역2", "2호선", 37.51, 127.02),
+                    createMockStation(3L, "역3", "3호선", 37.52, 127.03),
+                    createMockStation(4L, "역4", "4호선", 37.53, 127.04),
+                    createMockStation(5L, "역5", "5호선", 37.54, 127.05)
+            );
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(stations);
+            // 역1(10분)이 1위, 역5(50분)가 꼴찌
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(10, 1000, true), new TransitRouteResult(20, 2000, true),
+                                    new TransitRouteResult(30, 3000, true), new TransitRouteResult(40, 4000, true),
+                                    new TransitRouteResult(50, 5000, true)),
+                            List.of(new TransitRouteResult(10, 1000, true), new TransitRouteResult(20, 2000, true),
+                                    new TransitRouteResult(30, 3000, true), new TransitRouteResult(40, 4000, true),
+                                    new TransitRouteResult(50, 5000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.recommendations()).hasSize(3);
+            assertThat(response.recommendations()).extracting("stationName")
+                    .containsExactly("역1", "역2", "역3");
+            assertThat(response.recommendations()).extracting("rank").containsExactly(1, 2, 3);
+            // Kakao 자동차 보강은 Top 3 x 참가자 2명 = 6회만 호출
+            verify(kakaoDirectionsClient, times(6))
+                    .requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any());
+        }
+
+        @Test
+        @DisplayName("Kakao 자동차 경로가 실패해도 추천은 성공하고 해당 경로만 도달 불가 값이 된다")
+        void succeedsWhenKakaoDrivingFails() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            Station station = createMockStation(6L, "역삼역", "2호선", 37.5006, 127.0366);
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(List.of(station));
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(10, 5000, true)),
+                            List.of(new TransitRouteResult(15, 6000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(null);
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.recommendations()).hasSize(1);
+            assertThat(response.recommendations().getFirst().routes())
+                    .extracting("drivingDuration").containsExactly(999, 999);
+        }
+
+        @Test
         @DisplayName("departureName이 없으면 participant 이름으로 대체한다")
         void usesParticipantNameWhenDepartureNameIsNull() {
             mockMeetingWithLocationPoll();
@@ -205,57 +275,19 @@ class MidpointRecommendationServiceImplTest {
             Station station = createMockStation(6L, "역삼역", "2호선", 37.5006, 127.0366);
             when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
                     .thenReturn(List.of(station));
-            when(mapGlotRouteClient.calculateDriving(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
-                    .thenReturn(new DrivingRouteResult(600, 5000, true));
-            when(odsayTransitRouteClient.calculate(any(LocationVote.class), any(Station.class)))
-                    .thenReturn(new TransitRouteResult(10, 5000, true));
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(10, 5000, true)),
+                            List.of(new TransitRouteResult(15, 6000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
 
             MidpointRecommendationResponse response =
                     midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
 
-            assertThat(response.recommendations().getFirst().routes().getFirst().departureName()).isEqualTo("김참가자");
-        }
-
-        @Test
-        @DisplayName("MapGlot 기준 하위 후보역은 ODsay 정밀 평가 대상에서 제외한다")
-        void filtersWorstDrivingCandidateBeforeOdsayEvaluation() {
-            mockMeetingWithLocationPoll();
-            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
-            LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
-            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
-            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
-            List<Station> stations = List.of(
-                    createMockStation(1L, "역1", "1호선", 37.50, 127.01),
-                    createMockStation(2L, "역2", "2호선", 37.51, 127.02),
-                    createMockStation(3L, "역3", "3호선", 37.52, 127.03),
-                    createMockStation(4L, "역4", "4호선", 37.53, 127.04),
-                    createMockStation(5L, "역5", "5호선", 37.54, 127.05),
-                    createMockStation(6L, "역6", "6호선", 37.55, 127.06)
-            );
-            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
-                    .thenReturn(stations);
-            when(mapGlotRouteClient.calculateDriving(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
-                    .thenReturn(new DrivingRouteResult(600, 5000, true))
-                    .thenReturn(new DrivingRouteResult(600, 5000, true))
-                    .thenReturn(new DrivingRouteResult(700, 6000, true))
-                    .thenReturn(new DrivingRouteResult(700, 6000, true))
-                    .thenReturn(new DrivingRouteResult(800, 7000, true))
-                    .thenReturn(new DrivingRouteResult(800, 7000, true))
-                    .thenReturn(new DrivingRouteResult(900, 8000, true))
-                    .thenReturn(new DrivingRouteResult(900, 8000, true))
-                    .thenReturn(new DrivingRouteResult(1000, 9000, true))
-                    .thenReturn(new DrivingRouteResult(1000, 9000, true))
-                    .thenReturn(new DrivingRouteResult(5000, 20000, true))
-                    .thenReturn(new DrivingRouteResult(5000, 20000, true));
-            when(odsayTransitRouteClient.calculate(any(LocationVote.class), any(Station.class)))
-                    .thenReturn(new TransitRouteResult(10, 5000, true));
-
-            MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
-
-            assertThat(response.recommendations()).hasSize(3);
-            verify(odsayTransitRouteClient, never()).calculate(vote1, stations.get(5));
-            verify(odsayTransitRouteClient, never()).calculate(vote2, stations.get(5));
+            assertThat(response.recommendations().getFirst().routes().getFirst().departureName())
+                    .isEqualTo("김참가자");
         }
     }
 

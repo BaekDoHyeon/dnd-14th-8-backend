@@ -93,11 +93,11 @@ import java.lang.annotation.Target;
                 content = @Content(
                         mediaType = "application/json",
                         examples = @ExampleObject(
-                                name = "ODsay 실패",
+                                name = "Google Routes 실패",
                                 value = """
                                         {
-                                          "code": "E423",
-                                          "message": "대중교통 경로 조회에 실패했습니다."
+                                          "code": "E418",
+                                          "message": "외부 API 호출에 실패했습니다."
                                         }
                                         """
                         )

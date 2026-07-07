@@ -23,7 +23,7 @@ public class ExternalApiHealthController {
 
     @Operation(
             summary = "외부 API 헬스체크 (로컬 전용)",
-            description = "Kakao/ODsay/MapGlot 외부 API에 최소 비용 호출을 1건씩 보내 키·쿼터·연결 상태를 확인합니다. "
+            description = "Kakao/Google Routes 외부 API에 최소 비용 호출을 1건씩 보내 키·쿼터·연결 상태를 확인합니다. "
                     + "일일 쿼터가 소모되므로 필요할 때만 수동으로 호출하세요."
     )
     @GetMapping("/external")
