@@ -20,9 +20,15 @@ public record RouteDto(
         @Schema(description = "대중교통 이동거리 (미터)", example = "21400")
         int transitDistance,
 
+        @Schema(description = "대중교통 도달 가능 여부 (false면 이동시간은 999 고정값)", example = "true")
+        boolean transitReachable,
+
         @Schema(description = "자가용 이동시간 (분)", example = "45")
         int drivingDuration,
 
         @Schema(description = "자가용 이동거리 (미터)", example = "18200")
-        int drivingDistance
+        int drivingDistance,
+
+        @Schema(description = "자가용 도달 가능 여부 (false면 이동시간은 999 고정값)", example = "true")
+        boolean drivingReachable
 ) {}

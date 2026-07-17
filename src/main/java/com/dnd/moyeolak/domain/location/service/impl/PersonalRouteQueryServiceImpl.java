@@ -91,8 +91,12 @@ public class PersonalRouteQueryServiceImpl implements PersonalRouteQueryService 
                 station.getLongitude()
         );
 
-        if (pathInfo == null || pathInfo.safeTotal() >= 999) {
+        if (pathInfo == null) {
             throw new BusinessException(ErrorCode.ODSAY_API_ERROR);
+        }
+        // ODsay가 경로를 찾지 못하면 999분 응답 — API 장애가 아니라 경로 부재
+        if (pathInfo.safeTotal() >= 999) {
+            throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
         }
 
         int transferCount = pathInfo.safeBusTransit() + pathInfo.safeSubwayTransit();
@@ -120,7 +124,7 @@ public class PersonalRouteQueryServiceImpl implements PersonalRouteQueryService 
         );
 
         if (summary == null) {
-            throw new BusinessException(ErrorCode.KAKAO_API_ERROR);
+            throw new BusinessException(ErrorCode.ROUTE_NOT_FOUND);
         }
 
         int durationMinutes = summary.duration() / 60;

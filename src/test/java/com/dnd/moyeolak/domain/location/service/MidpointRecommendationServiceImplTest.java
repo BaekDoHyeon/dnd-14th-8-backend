@@ -37,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -120,7 +121,7 @@ class MidpointRecommendationServiceImplTest {
         }
 
         @Test
-        @DisplayName("모든 후보역이 전원 도달 불가이면 GOOGLE_API_ERROR 예외가 발생한다")
+        @DisplayName("모든 후보역이 전원 도달 불가이면 NO_REACHABLE_STATIONS 예외가 발생한다")
         void throwsWhenAllTransitRoutesUnreachable() {
             mockMeetingWithLocationPoll();
             LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
@@ -138,7 +139,7 @@ class MidpointRecommendationServiceImplTest {
 
             assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
                     .isInstanceOf(BusinessException.class)
-                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GOOGLE_API_ERROR);
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_REACHABLE_STATIONS);
         }
     }
 
@@ -255,6 +256,65 @@ class MidpointRecommendationServiceImplTest {
             assertThat(response.recommendations()).hasSize(1);
             assertThat(response.recommendations().getFirst().routes())
                     .extracting("drivingDuration").containsExactly(999, 999);
+        }
+
+        @Test
+        @DisplayName("도달 불가 참가자가 있는 역보다 전원 도달 가능한 역이 우선 추천된다")
+        void prefersFullyReachableStationOverPartiallyReachableOne() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            Station partiallyReachable = createMockStation(1L, "역1", "1호선", 37.50, 127.01);
+            Station fullyReachable = createMockStation(2L, "역2", "2호선", 37.51, 127.02);
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(List.of(partiallyReachable, fullyReachable));
+            // 역1: 참가자A만 도달 가능(10분, 평균 10분) / 역2: 전원 도달 가능(평균 50분)
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(10, 1000, true), new TransitRouteResult(50, 5000, true)),
+                            List.of(TransitRouteResult.unreachable(), new TransitRouteResult(50, 5000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.recommendations()).extracting("stationName")
+                    .containsExactly("역2", "역1");
+        }
+
+        @Test
+        @DisplayName("도달 불가 경로는 RouteDto의 reachable 플래그가 false로 내려간다")
+        void marksUnreachableRoutesInRouteDto() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.2426", "131.8597", "참가자B", "경북 울릉군 독도");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            Station station = createMockStation(6L, "역삼역", "2호선", 37.5006, 127.0366);
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(List.of(station));
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(10, 5000, true)),
+                            List.of(TransitRouteResult.unreachable())
+                    ));
+            // 참가자A는 자동차 경로 성공, 참가자B(독도)는 실패(null)
+            when(kakaoDirectionsClient.requestDrivingRoute(eq(37.5000), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
+            when(kakaoDirectionsClient.requestDrivingRoute(eq(37.2426), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(null);
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.recommendations().getFirst().routes())
+                    .extracting("transitReachable").containsExactly(true, false);
+            assertThat(response.recommendations().getFirst().routes())
+                    .extracting("drivingReachable").containsExactly(true, false);
         }
 
         @Test

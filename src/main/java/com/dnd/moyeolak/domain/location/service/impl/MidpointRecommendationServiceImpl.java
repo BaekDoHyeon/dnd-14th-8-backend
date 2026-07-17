@@ -177,12 +177,13 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         }
 
         if (evaluations.isEmpty()) {
-            throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
+            throw new BusinessException(ErrorCode.NO_REACHABLE_STATIONS);
         }
 
+        // 도달 불가 참가자가 적은 역이 우선 — 일부만 갈 수 있는 역이 짧은 평균만으로 1위가 되지 않도록
         return evaluations.stream()
-                .sorted(Comparator.comparingDouble(StationEvaluation::avgTransitDuration)
-                        .thenComparingInt(StationEvaluation::unreachableTransitRouteCount)
+                .sorted(Comparator.comparingInt(StationEvaluation::unreachableTransitRouteCount)
+                        .thenComparingDouble(StationEvaluation::avgTransitDuration)
                         .thenComparingInt(StationEvaluation::distanceFromCenter))
                 .limit(TOP_RECOMMENDATIONS)
                 .toList();
@@ -213,8 +214,10 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
                                 .departureAddress(vote.getDepartureLocation())
                                 .transitDuration(transitRoute.durationMinutes())
                                 .transitDistance(transitRoute.distanceMeters())
+                                .transitReachable(transitRoute.reachable())
                                 .drivingDuration(drivingRoute.durationSeconds() / 60)
                                 .drivingDistance(drivingRoute.distanceMeters())
+                                .drivingReachable(drivingRoute.reachable())
                                 .build());
                     }
 

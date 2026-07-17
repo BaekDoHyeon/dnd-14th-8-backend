@@ -110,11 +110,25 @@ class PersonalRouteQueryServiceImplTest {
     }
 
     @Test
-    @DisplayName("대중교통 조회가 실패하면 ODSAY_API_ERROR를 발생시킨다")
-    void throwsWhenTransitFails() {
+    @DisplayName("대중교통 경로가 없으면(999) ROUTE_NOT_FOUND를 발생시킨다")
+    void throwsRouteNotFoundWhenTransitRouteMissing() {
         setupCommonMocks();
         when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0));
+
+        assertThatThrownBy(() -> personalRouteQueryService.getPersonalRoute(
+                MEETING_ID, STATION_ID, PARTICIPANT_ID, null, RouteMode.TRANSIT
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ROUTE_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("ODsay API 호출 자체가 실패하면(null) ODSAY_API_ERROR를 발생시킨다")
+    void throwsOdsayApiErrorWhenClientFails() {
+        setupCommonMocks();
+        when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(null);
 
         assertThatThrownBy(() -> personalRouteQueryService.getPersonalRoute(
                 MEETING_ID, STATION_ID, PARTICIPANT_ID, null, RouteMode.TRANSIT
@@ -124,8 +138,8 @@ class PersonalRouteQueryServiceImplTest {
     }
 
     @Test
-    @DisplayName("자동차 조회가 실패하면 KAKAO_API_ERROR를 발생시킨다")
-    void throwsWhenDrivingFails() {
+    @DisplayName("자동차 경로가 없으면 ROUTE_NOT_FOUND를 발생시킨다")
+    void throwsRouteNotFoundWhenDrivingRouteMissing() {
         setupCommonMocks();
         when(odsayClient.searchRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(new OdsayPathInfo(30, 1000, 0, 0, 5000, 100, 0));
@@ -136,7 +150,7 @@ class PersonalRouteQueryServiceImplTest {
                 MEETING_ID, STATION_ID, PARTICIPANT_ID, null, RouteMode.DRIVING
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.KAKAO_API_ERROR);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ROUTE_NOT_FOUND);
     }
 
     @Test

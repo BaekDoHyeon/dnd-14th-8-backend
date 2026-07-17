@@ -218,6 +218,81 @@ class LocationVoteUnitTest {
     }
 
     @Nested
+    @DisplayName("서비스 지역 검증")
+    class ServiceAreaValidation {
+
+        @Test
+        @DisplayName("서비스 지역(수도권) 밖 좌표(독도)로 등록 시 OUT_OF_SERVICE_AREA 예외가 발생한다")
+        void createLocationVote_outOfServiceArea_throwsException() {
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    "meeting-id-123",
+                    null,
+                    "홍길동",
+                    "경북 울릉군 독도",
+                    "37.2426",
+                    "131.8597"
+            );
+
+            assertThatThrownBy(() -> locationService.createLocationVote(request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUT_OF_SERVICE_AREA);
+
+            verify(locationVoteRepository, never()).save(any());
+            verify(participantService, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("서비스 지역 남쪽 밖 좌표(제주)로 등록 시 OUT_OF_SERVICE_AREA 예외가 발생한다")
+        void createLocationVote_southOfServiceArea_throwsException() {
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    "meeting-id-123",
+                    null,
+                    "홍길동",
+                    "제주특별자치도 제주시",
+                    "33.4996",
+                    "126.5312"
+            );
+
+            assertThatThrownBy(() -> locationService.createLocationVote(request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUT_OF_SERVICE_AREA);
+        }
+
+        @Test
+        @DisplayName("숫자가 아닌 좌표로 등록 시 INVALID_FORMAT 예외가 발생한다")
+        void createLocationVote_nonNumericCoordinates_throwsException() {
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    "meeting-id-123",
+                    null,
+                    "홍길동",
+                    "서울시 강남구",
+                    "abc",
+                    "127.0276368"
+            );
+
+            assertThatThrownBy(() -> locationService.createLocationVote(request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_FORMAT);
+        }
+
+        @Test
+        @DisplayName("출발지 수정 시에도 서비스 지역 밖 좌표면 OUT_OF_SERVICE_AREA 예외가 발생한다")
+        void updateLocationVote_outOfServiceArea_throwsException() {
+            com.dnd.moyeolak.domain.meeting.dto.UpdateLocationVoteRequest request =
+                    new com.dnd.moyeolak.domain.meeting.dto.UpdateLocationVoteRequest(
+                            "홍길동",
+                            "경북 울릉군 독도",
+                            "37.2426",
+                            "131.8597"
+                    );
+
+            assertThatThrownBy(() -> locationService.updateLocationVote(1L, request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUT_OF_SERVICE_AREA);
+        }
+    }
+
+    @Nested
     @DisplayName("중복 localStorageKey 예외")
     class DuplicateLocalStorageKey {
 

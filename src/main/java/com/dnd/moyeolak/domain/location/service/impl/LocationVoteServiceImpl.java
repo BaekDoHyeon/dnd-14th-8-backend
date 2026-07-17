@@ -31,6 +31,12 @@ public class LocationVoteServiceImpl implements LocationVoteService {
     private final ParticipantService participantService;
     private final LocationVoteRepository locationVoteRepository;
 
+    // 수도권 전철망 커버리지 기준 서비스 지역 (남: 신창 36.77, 북: 소요산 37.95, 서: 인천 126.45, 동: 춘천 127.73 + 여유분)
+    private static final double SERVICE_AREA_MIN_LAT = 36.5;
+    private static final double SERVICE_AREA_MAX_LAT = 38.2;
+    private static final double SERVICE_AREA_MIN_LNG = 126.2;
+    private static final double SERVICE_AREA_MAX_LNG = 128.0;
+
     @Override
     public List<LocationVoteResponse> listLocationVote(String meetingId) {
         Meeting meeting = meetingRepository.findByIdWithAllAssociations(meetingId)
@@ -51,6 +57,8 @@ public class LocationVoteServiceImpl implements LocationVoteService {
     @Transactional
     @CacheEvict(value = "midpointRecommendations", allEntries = true)
     public void updateLocationVote(Long locationVoteId, UpdateLocationVoteRequest request) {
+        validateServiceArea(request.departureLat(), request.departureLng());
+
         LocationVote locationVote = locationVoteRepository.findById(locationVoteId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_VOTE_NOT_FOUND));
         locationVote.update(request);
@@ -60,6 +68,8 @@ public class LocationVoteServiceImpl implements LocationVoteService {
     @Transactional
     @CacheEvict(value = "midpointRecommendations", allEntries = true)
     public Long createLocationVote(CreateLocationVoteRequest request) {
+        validateServiceArea(request.departureLat(), request.departureLng());
+
         Meeting meeting = meetingRepository.findByIdWithAllAssociations(request.meetingId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEETING_NOT_FOUND));
 
@@ -92,6 +102,22 @@ public class LocationVoteServiceImpl implements LocationVoteService {
         participantService.save(participant);
 
         return locationVote.getId();
+    }
+
+    private void validateServiceArea(String departureLat, String departureLng) {
+        double lat;
+        double lng;
+        try {
+            lat = Double.parseDouble(departureLat);
+            lng = Double.parseDouble(departureLng);
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.INVALID_FORMAT);
+        }
+
+        if (lat < SERVICE_AREA_MIN_LAT || lat > SERVICE_AREA_MAX_LAT
+                || lng < SERVICE_AREA_MIN_LNG || lng > SERVICE_AREA_MAX_LNG) {
+            throw new BusinessException(ErrorCode.OUT_OF_SERVICE_AREA);
+        }
     }
 
     @Override
