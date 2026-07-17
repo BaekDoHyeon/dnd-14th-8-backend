@@ -96,6 +96,16 @@ jobs:
             set -e
             cd /app/moyeolak
 
+            if [ ! -f .env ]; then
+              echo "ERROR: /app/moyeolak/.env 파일이 없습니다. 서버에 .env를 생성해주세요."
+              exit 1
+            fi
+            if [ ! -r .env ]; then
+              echo "ERROR: /app/moyeolak/.env를 읽을 수 없습니다. (현재: $(ls -l .env))"
+              echo "서버에서 'sudo chown ubuntu:ubuntu /app/moyeolak/.env' 실행 후 재시도하세요."
+              exit 1
+            fi
+
             aws ecr get-login-password --region ap-northeast-2 \
               | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
 
@@ -113,3 +123,23 @@ jobs:
             --group-id ${{ secrets.AWS_SG_ID }} \
             --protocol tcp --port 22 \
             --cidr ${{ steps.runner-ip.outputs.ipv4 }}/32
+
+      # 커밋 메시지 본문(멀티라인)이 Slack 페이로드 YAML을 깨지 않도록 제목만 추출
+      - name: Prepare Slack message
+        if: always()
+        id: slack-prep
+        run: echo "commit_title=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack
+        if: always()
+        uses: slackapi/slack-github-action@v3.0.3
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "${{ job.status == 'success' && '✅ 배포 성공' || '❌ 배포 실패' }} — moyeolak-backend (${{ github.ref_name }})"
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "${{ job.status == 'success' && ':white_check_mark: *배포 성공*' || ':x: *배포 실패*' }} — *moyeolak-backend*\n*브랜치:* `${{ github.ref_name }}`\n*커밋:* ${{ steps.slack-prep.outputs.commit_title }}\n*작성자:* ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|워크플로우 실행 보기>"
