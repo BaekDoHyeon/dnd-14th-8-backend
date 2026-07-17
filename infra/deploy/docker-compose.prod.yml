@@ -23,17 +23,11 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_HOST: mysql
-      DB_PORT: "3306"
+      DB_HOST: postgres
+      DB_PORT: "5432"
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      POSTGIS_HOST: postgis
-      POSTGIS_PORT: "5432"
-      POSTGIS_DB_NAME: ${POSTGIS_DB_NAME}
-      POSTGIS_USERNAME: ${POSTGIS_USERNAME}
-      POSTGIS_PASSWORD: ${POSTGIS_PASSWORD}
-      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-none}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       ODSAY_API_KEY: ${ODSAY_API_KEY}
@@ -43,52 +37,26 @@ services:
     volumes:
       - ./logs:/logs
     depends_on:
-      mysql:
-        condition: service_healthy
-      postgis:
+      postgres:
         condition: service_healthy
 
-  mysql:
-    image: mysql:8.0
-    container_name: moyeolak-mysql
-    restart: unless-stopped
-    ports:
-      # 루프백 전용 바인딩: SSH 터널로만 접근 가능, 외부 노출 없음
-      - "127.0.0.1:3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      TZ: Asia/Seoul
-    volumes:
-      - mysql_data:/var/lib/mysql
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  postgis:
+  postgres:
     # 공식 postgis/postgis는 amd64 전용이라 arm64(t4g)에서는 imresamu 빌드 사용
     image: imresamu/postgis:15-3.5
-    container_name: moyeolak-postgis
+    container_name: moyeolak-postgres
     restart: unless-stopped
     ports:
       # 루프백 전용 바인딩: SSH 터널로만 접근 가능, 외부 노출 없음
       - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_DB: ${POSTGIS_DB_NAME}
-      POSTGRES_USER: ${POSTGIS_USERNAME}
-      POSTGRES_PASSWORD: ${POSTGIS_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
     volumes:
-      - ./postgis-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGIS_USERNAME} -d ${POSTGIS_DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -160,7 +128,6 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  mysql_data:
   pgdata:
   prometheus-data:
   loki-data:

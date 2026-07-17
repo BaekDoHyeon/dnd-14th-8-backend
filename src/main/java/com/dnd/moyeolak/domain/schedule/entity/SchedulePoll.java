@@ -45,10 +45,10 @@ public class SchedulePoll extends BaseEntity {
     @Getter(AccessLevel.NONE)
     private int endTime = 24 * 60;
 
-    @Column(columnDefinition = "DATETIME(0)", comment = "확정 시작 시간")
+    @Column(comment = "확정 시작 시간")
     private LocalDateTime confirmedStartTime;
 
-    @Column(columnDefinition = "DATETIME(0)", comment = "확정 종료 시간")
+    @Column(comment = "확정 종료 시간")
     private LocalDateTime confirmedEndTime;
 
     @Builder.Default

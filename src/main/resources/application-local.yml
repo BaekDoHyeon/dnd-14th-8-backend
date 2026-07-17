@@ -1,22 +1,19 @@
 spring:
+  docker:
+    compose:
+      lifecycle-management: start-only
+
   datasource:
-    primary:
-      url: jdbc:mysql://localhost:3306/moyeolak?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-      username: moyeolak
-      password: moyeolak
-      driver-class-name: com.mysql.cj.jdbc.Driver
-    secondary:
-      url: jdbc:postgresql://localhost:5432/moyeolak_spatial
-      username: moyeolak
-      password: moyeolak
-      driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/moyeolak
+    username: moyeolak
+    password: moyeolak
+    driver-class-name: org.postgresql.Driver
 
   jpa:
     show-sql: true
     open-in-view: false
-    defer-datasource-initialization: true
-    primary:
-      ddl-auto: create
+    hibernate:
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true

@@ -4,21 +4,15 @@ server:
 
 spring:
   datasource:
-    primary:
-      url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useSSL=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-      username: ${DB_USERNAME}
-      password: ${DB_PASSWORD}
-      driver-class-name: com.mysql.cj.jdbc.Driver
-    secondary:
-      url: jdbc:postgresql://${POSTGIS_HOST}:${POSTGIS_PORT}/${POSTGIS_DB_NAME}
-      username: ${POSTGIS_USERNAME}
-      password: ${POSTGIS_PASSWORD}
-      driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
 
   jpa:
     open-in-view: false
-    primary:
-      ddl-auto: ${JPA_DDL_AUTO:none}
+    hibernate:
+      ddl-auto: validate
 
 google:
   api:

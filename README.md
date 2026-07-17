@@ -10,7 +10,6 @@
 
 ![Java](https://img.shields.io/badge/Java_25-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_4.0-6DB33F?style=flat-square&logo=springboot&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL_8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostGIS_15-336791?style=flat-square&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white)
@@ -101,8 +100,7 @@ flowchart TB
     end
 
     subgraph DB["Persistence Layer"]
-        MySQL[("MySQL 8.0\n도메인 데이터")]
-        PostGIS[("PostgreSQL+PostGIS\n지하철역 공간 데이터")]
+        PostGIS[("PostgreSQL+PostGIS\n도메인·공간 단일 DB")]
     end
 
     subgraph MON["Monitoring Stack"]
@@ -229,12 +227,12 @@ erDiagram
 |------|------|
 | Language | Java 25 |
 | Framework | Spring Boot 4.0.1, Spring Data JPA |
-| Database | MySQL 8.0 (도메인), PostgreSQL 15 + PostGIS 3.3 (공간) |
+| Database | PostgreSQL 15 + PostGIS 3.3, Flyway 마이그레이션 |
 | ORM | Hibernate Spatial (JTS Geometry) |
 | Cache | Caffeine (in-memory) |
 | Docs | SpringDoc OpenAPI 3 (Swagger UI) |
 | ID | NanoId (jnanoid) |
-| Test | JUnit 5, JaCoCo (70% 커버리지) |
+| Test | JUnit 5, Testcontainers, JaCoCo (70% 커버리지) |
 
 ### Infrastructure
 
@@ -296,11 +294,15 @@ flowchart TD
 ### 실행
 
 ```bash
-# 1. 인프라 컨테이너 실행 (MySQL, PostgreSQL+PostGIS, Redis)
-docker-compose up -d mysql postgres redis
-
-# 2. Spring Boot 실행 (local 프로파일)
+# Spring Boot 실행 (local 프로파일)
+# spring-boot-docker-compose가 postgres/redis를 자동 기동한다.
 ./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+모니터링 스택까지 함께 띄울 때만 별도 profile을 지정합니다.
+
+```bash
+docker-compose --profile monitoring up -d
 ```
 
 ### 접속 정보
@@ -316,8 +318,7 @@ docker-compose up -d mysql postgres redis
 
 | DB | Host | Port | Database | User | Password |
 |----|------|------|----------|------|----------|
-| MySQL | localhost | 3306 | moyeolak | moyeolak | moyeolak |
-| PostgreSQL | localhost | 5432 | moyeolak_spatial | moyeolak | moyeolak |
+| PostgreSQL+PostGIS | localhost | 5432 | moyeolak | moyeolak | moyeolak |
 
 > 📄 상세 가이드: [`docs/local-dev-setup.md`](docs/local-dev-setup.md)
 
@@ -337,10 +338,10 @@ com.dnd.moyeolak
     │   ├── google     # Google Routes API / Places
     │   ├── odsay      # ODsay 대중교통 API (개인 경로 상세)
     │   └── kakao      # Kakao Local / Directions
-    ├── config         # Swagger, Cache, CORS, DataSource
+    ├── config         # Swagger, Cache, CORS
     ├── exception      # BusinessException, GlobalExceptionAdvice
     ├── response       # ApiResponse, ErrorCode, SuccessCode
-    └── station        # PostGIS 기반 지하철역 (Secondary DB)
+    └── station        # PostGIS 기반 지하철역
 ```
 
 <br/>

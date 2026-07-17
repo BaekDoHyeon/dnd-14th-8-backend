@@ -1,12 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS postgis;
-
-CREATE TABLE IF NOT EXISTS stations (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    line VARCHAR(50),
-    geom GEOMETRY(POINT, 4326) NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_stations_geom ON stations USING GIST(geom);
 
 -- 1호선
 INSERT INTO stations (name, line, geom) VALUES

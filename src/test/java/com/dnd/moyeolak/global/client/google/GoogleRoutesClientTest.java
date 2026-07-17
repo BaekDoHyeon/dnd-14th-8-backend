@@ -124,7 +124,7 @@ class GoogleRoutesClientTest {
     @DisplayName("departureTime을 KST 기준 RFC3339 UTC로 변환해 전송하고 소수점 초 duration도 파싱한다")
     void sendsDepartureTimeAsRfc3339AndParsesFractionalSeconds() {
         server.expect(requestTo(MATRIX_URL))
-                .andExpect(jsonPath("$.departureTime").value("2026-07-10T00:30:00Z"))
+                .andExpect(jsonPath("$.departureTime").value("2026-07-20T00:30:00Z"))
                 .andRespond(withSuccess("""
                         [{"originIndex":0,"destinationIndex":0,"condition":"ROUTE_EXISTS","distanceMeters":5000,"duration":"1234.5s"}]
                         """, MediaType.APPLICATION_JSON));
@@ -132,7 +132,7 @@ class GoogleRoutesClientTest {
         List<List<TransitRouteResult>> matrix = client.computeTransitMatrix(
                 List.of(new LatLng(37.5, 127.0)),
                 List.of(new LatLng(37.4979, 127.0276)),
-                java.time.LocalDateTime.of(2026, 7, 10, 9, 30)); // KST 09:30 -> UTC 00:30
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 30)); // KST 09:30 -> UTC 00:30
 
         assertThat(matrix.get(0).get(0).durationMinutes()).isEqualTo(21); // 1234.5s -> 1234s -> 21분
         server.verify();

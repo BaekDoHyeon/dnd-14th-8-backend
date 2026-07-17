@@ -86,16 +86,6 @@ jobs:
           source: "monitoring/"
           target: /app/moyeolak
 
-      - name: Copy postgis init script to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "src/main/resources/postgis-init.sql"
-          target: /app/moyeolak
-          strip_components: 3
-
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.0
         with:
