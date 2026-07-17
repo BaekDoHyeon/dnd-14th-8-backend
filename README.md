@@ -42,6 +42,24 @@
 
 <br/>
 
+## 📌 문서 버전
+
+현재 README는 **PostgreSQL+PostGIS 단일 DB 전환 이후**의 구조를 기준으로 합니다.
+
+- 이전 MySQL+PostGIS 분리 구성 문서: [`docs/README-legacy-db-separation.md`](docs/README-legacy-db-separation.md)
+- 운영 DB 일원화 전환 절차: [`docs/db-consolidation-runbook.md`](docs/db-consolidation-runbook.md)
+
+### 주요 변경 사항
+
+| 구분 | 이전 | 현재 |
+|------|------|------|
+| 데이터베이스 | MySQL 8.0 + PostgreSQL/PostGIS 이중 구성 | PostgreSQL 15 + PostGIS 3.3 단일 구성 |
+| 스키마 관리 | JPA DDL + 별도 PostGIS init SQL | Flyway 마이그레이션 |
+| 로컬 실행 | DB 컨테이너 수동 기동 | `bootRun` 시 spring-boot-docker-compose 자동 기동 |
+| 테스트 | primary/secondary datasource 기반 H2 | 단일 H2(PostgreSQL mode) + Testcontainers PostGIS 검증 |
+
+<br/>
+
 ## ✨ 주요 기능
 
 ### 1. 모임 조율 플로우
