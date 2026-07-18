@@ -23,6 +23,7 @@ RUN ./gradlew clean build -x test --no-daemon
 FROM eclipse-temurin:25-jre
 
 WORKDIR /app
+ENV TZ=Asia/Seoul
 
 # 빌드된 JAR 파일 복사
 COPY --from=builder /app/build/libs/*.jar app.jar
@@ -31,4 +32,4 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
 
 # 애플리케이션 실행
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Duser.timezone=Asia/Seoul", "-jar", "app.jar"]

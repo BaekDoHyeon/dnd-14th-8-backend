@@ -32,8 +32,9 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       ODSAY_API_KEY: ${ODSAY_API_KEY}
       SWAGGER_SERVER_URL: ${SWAGGER_SERVER_URL}
+      TZ: Asia/Seoul
       # 2GB 인스턴스에서 힙 폭주 방지
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0 -Duser.timezone=Asia/Seoul"
     volumes:
       - ./logs:/logs
     depends_on:
@@ -53,6 +54,7 @@ services:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: Asia/Seoul
+    command: ["postgres", "-c", "timezone=Asia/Seoul"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

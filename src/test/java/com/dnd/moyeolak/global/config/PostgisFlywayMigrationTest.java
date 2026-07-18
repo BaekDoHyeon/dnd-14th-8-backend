@@ -50,9 +50,9 @@ class PostgisFlywayMigrationTest {
         Integer stationCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM stations", Integer.class);
         String postgisVersion = jdbcTemplate.queryForObject("SELECT PostGIS_Version()", String.class);
 
-        assertThat(appliedMigrationCount).isEqualTo(2);
+        assertThat(appliedMigrationCount).isEqualTo(3);
         assertThat(stationCount).isPositive();
         assertThat(postgisVersion).isNotBlank();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
     }
 }

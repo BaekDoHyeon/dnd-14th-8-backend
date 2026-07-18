@@ -17,6 +17,7 @@ services:
       POSTGRES_USER: moyeolak
       POSTGRES_PASSWORD: moyeolak
       TZ: Asia/Seoul
+    command: ["postgres", "-c", "timezone=Asia/Seoul"]
     ports:
       - "5432:5432"
     volumes:

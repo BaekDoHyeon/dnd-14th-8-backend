@@ -8,6 +8,8 @@ spring:
     username: moyeolak
     password: moyeolak
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-init-sql: SET TIME ZONE 'Asia/Seoul'
 
   jpa:
     show-sql: true
