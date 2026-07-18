@@ -1,5 +1,6 @@
 package com.dnd.moyeolak.domain.location.dto;
 
+import com.dnd.moyeolak.domain.location.enums.MidpointResultType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -22,5 +23,8 @@ public record MidpointRecommendationResponse(
         int registeredCount,
 
         @Schema(description = "전체 참여자 수", example = "10")
-        int totalCount
+        int totalCount,
+
+        @Schema(description = "중간지점 추천 결과 타입", example = "NORMAL")
+        MidpointResultType resultType
 ) {}

@@ -71,6 +71,7 @@ import java.lang.annotation.Target;
                                                 "departureTime": "2026-02-18T10:30:00",
                                                 "registeredCount": 4,
                                                 "totalCount": 10,
+                                                "resultType": "NORMAL",
                                                 "recommendations": [
                                                   {
                                                     "rank": 1,

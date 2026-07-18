@@ -318,6 +318,68 @@ class MidpointRecommendationServiceImplTest {
         }
 
         @Test
+        @DisplayName("추천 후보 간 평균 시간이 비슷하고 모두 15분 이내이면 근거리 출발지 결과 타입을 반환한다")
+        void returnsNearbyDeparturesResultTypeForShortSimilarRoutes() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5550", "126.9100", "참가자A", "합정역");
+            LocationVote vote2 = createMockVote("37.5570", "126.9240", "참가자B", "홍대입구역");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            List<Station> stations = List.of(
+                    createMockStation(1L, "합정역", "2호선", 37.5495, 126.9137),
+                    createMockStation(2L, "홍대입구역", "2호선", 37.5572, 126.9245),
+                    createMockStation(3L, "상수역", "6호선", 37.5477, 126.9229)
+            );
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(stations);
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(8, 1000, true), new TransitRouteResult(10, 1300, true),
+                                    new TransitRouteResult(11, 1400, true)),
+                            List.of(new TransitRouteResult(9, 1100, true), new TransitRouteResult(8, 900, true),
+                                    new TransitRouteResult(12, 1500, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(2500, 480, null));
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.resultType().name()).isEqualTo("NEARBY_DEPARTURES");
+        }
+
+        @Test
+        @DisplayName("추천 후보 간 평균 시간이 벌어지면 일반 중간지점 결과 타입을 반환한다")
+        void returnsNormalResultTypeWhenRecommendationDurationsDiffer() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.6500", "126.7700", "참가자B", "경기 고양시");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            List<Station> stations = List.of(
+                    createMockStation(1L, "디지털미디어시티역", "공항철도", 37.5766, 126.9009),
+                    createMockStation(2L, "홍대입구역", "2호선", 37.5572, 126.9245),
+                    createMockStation(3L, "강남역", "2호선", 37.4979, 127.0276)
+            );
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(stations);
+            when(googleRoutesClient.computeTransitMatrix(anyList(), anyList(), any()))
+                    .thenReturn(List.of(
+                            List.of(new TransitRouteResult(30, 9000, true), new TransitRouteResult(45, 12000, true),
+                                    new TransitRouteResult(70, 20000, true)),
+                            List.of(new TransitRouteResult(34, 10000, true), new TransitRouteResult(52, 15000, true),
+                                    new TransitRouteResult(80, 24000, true))
+                    ));
+            when(kakaoDirectionsClient.requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                    .thenReturn(new KakaoDirectionsResponse.Summary(12000, 1800, null));
+
+            MidpointRecommendationResponse response =
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+
+            assertThat(response.resultType().name()).isEqualTo("NORMAL");
+        }
+
+        @Test
         @DisplayName("departureName이 없으면 participant 이름으로 대체한다")
         void usesParticipantNameWhenDepartureNameIsNull() {
             mockMeetingWithLocationPoll();
