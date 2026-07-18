@@ -4,6 +4,7 @@ import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleVoteResultResponse;
+import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
@@ -20,6 +21,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -30,6 +34,7 @@ public class MeetingServiceImpl implements MeetingService {
     private final MeetingRepository meetingRepository;
     private final ParticipantService participantService;
     private final ScheduleVoteService scheduleVoteService;
+    private final Clock clock;
 
     @Override
     @Transactional
@@ -93,6 +98,20 @@ public class MeetingServiceImpl implements MeetingService {
          *  - 예시: 일정 옵션 A: 3명, 일정 옵션 B: 5명, 일정 옵션 C: 2명
          */
         return GetMeetingScheduleVoteResultResponse.of(participantCount, participantNames, scheduleVotes);
+    }
+
+    @Override
+    public LandingStatsResponse getLandingStats() {
+        LocalDate today = LocalDate.now(clock);
+        LocalDateTime startInclusive = today.atStartOfDay();
+        LocalDateTime endExclusive = today.plusDays(1).atStartOfDay();
+
+        long todayCreatedMeetingCount = meetingRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                startInclusive,
+                endExclusive
+        );
+
+        return new LandingStatsResponse(todayCreatedMeetingCount);
     }
 
     @Override

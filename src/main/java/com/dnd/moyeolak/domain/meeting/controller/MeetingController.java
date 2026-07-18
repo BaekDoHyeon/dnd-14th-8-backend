@@ -3,6 +3,7 @@ package com.dnd.moyeolak.domain.meeting.controller;
 import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleVoteResultResponse;
+import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.global.response.ApiResponse;
@@ -31,6 +32,13 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<List<String>>> getAllMeetings() {
         List<String> allMeetings = meetingService.findAllMeetings();
         return ResponseEntity.ok(ApiResponse.success(allMeetings));
+    }
+
+    @GetMapping("/stats")
+    @Operation(summary = "랜딩 통계 조회", description = "랜딩 화면에 표시할 오늘 생성된 모임 수를 조회합니다.")
+    public ResponseEntity<ApiResponse<LandingStatsResponse>> getLandingStats() {
+        LandingStatsResponse stats = meetingService.getLandingStats();
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
     @GetMapping("/{meetingId}/schedules")

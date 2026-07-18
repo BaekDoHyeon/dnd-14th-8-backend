@@ -18,8 +18,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +37,9 @@ class MeetingServiceUnitTest {
 
     @Mock
     private MeetingRepository meetingRepository;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -165,6 +171,25 @@ class MeetingServiceUnitTest {
         assertThatThrownBy(() -> meetingService.deleteMeeting(meetingId))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining(ErrorCode.MEETING_NOT_FOUND.getMessage());
+    }
+
+    @Test
+    @DisplayName("랜딩 통계 조회 시 오늘 생성된 모임 수가 반환된다")
+    void getLandingStats_returnsTodayCreatedMeetingCount() {
+        // given
+        ZoneId zoneId = ZoneId.of("Asia/Seoul");
+        when(clock.instant()).thenReturn(Instant.parse("2026-07-18T03:15:00Z"));
+        when(clock.getZone()).thenReturn(zoneId);
+        when(meetingRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                LocalDateTime.of(2026, 7, 18, 0, 0),
+                LocalDateTime.of(2026, 7, 19, 0, 0)
+        )).thenReturn(128L);
+
+        // when
+        var response = meetingService.getLandingStats();
+
+        // then
+        assertThat(response.todayCreatedMeetingCount()).isEqualTo(128L);
     }
 
     private Meeting createMeetingWithAllAssociations() {
