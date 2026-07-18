@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -59,6 +60,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     null,  // localStorageKey가 null → 수동 추가
+                    null,
                     "홍길동",
                     "서울시 강남구",
                     "37.4979502",
@@ -91,6 +93,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     "",  // 빈 문자열 → 수동 추가
+                    null,
                     "김철수",
                     "서울시 홍대입구",
                     "37.5571010",
@@ -121,6 +124,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     "local-storage-key-abc",  // localStorageKey 존재, 신규 참여자
+                    null,
                     "이영희",
                     "서울시 왕십리",
                     "37.5614080",
@@ -159,6 +163,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     "local-storage-key-xyz",
+                    null,
                     "박민수",
                     "서울시 서초구",
                     "37.4837121",
@@ -196,6 +201,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     "host-key",
+                    null,
                     "모임장",
                     "서울시 마포구",
                     "37.5549340",
@@ -215,6 +221,171 @@ class LocationVoteUnitTest {
             assertThat(host.getLocationVotes()).hasSize(1);
             assertThat(host.getLocationVotes().get(0).getDepartureLocation()).isEqualTo("서울시 마포구");
         }
+
+        @Test
+        @DisplayName("모임장 첫 출발지 등록 시 요청 이름이 달라도 모임장 이름이 덮어써지지 않는다")
+        void createLocationVote_hostFirstVote_doesNotOverwriteHostName() {
+            // given
+            String meetingId = "meeting-id-789";
+            Meeting meeting = Meeting.ofId(meetingId);
+            Participant host = Participant.hostOf(meeting, "host-key", "모임장");
+            meeting.addParticipant(host);
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    meetingId,
+                    "host-key",
+                    null,
+                    "다른사람이름",
+                    "서울시 마포구",
+                    "37.5549340",
+                    "126.9137540"
+            );
+
+            when(meetingRepository.findByIdWithAllAssociations(meetingId)).thenReturn(Optional.of(meeting));
+
+            // when
+            locationService.createLocationVote(request);
+
+            // then
+            assertThat(host.getName()).isEqualTo("모임장");
+        }
+    }
+
+    @Nested
+    @DisplayName("기존 일반 참여자 본인 출발지 등록")
+    class ExistingParticipantFirstLocationVote {
+
+        @Test
+        @DisplayName("일정 투표로 참여한 일반 참여자가 첫 출발지 등록 시 기존 Participant에 연결된다")
+        void createLocationVote_existingNonHostFirstVote_savesVoteLinkedToExistingParticipant() {
+            // given
+            String meetingId = "meeting-id-321";
+            Meeting meeting = Meeting.ofId(meetingId);
+            Participant participant = Participant.of(meeting, "member-key", "일반참여자");
+            meeting.addParticipant(participant);
+            // 일정 투표로 이미 참여했지만 출발지는 아직 등록하지 않은 상태
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    meetingId,
+                    "member-key",
+                    null,
+                    "일반참여자",
+                    "서울시 성동구",
+                    "37.5633450",
+                    "127.0371250"
+            );
+
+            when(meetingRepository.findByIdWithAllAssociations(meetingId)).thenReturn(Optional.of(meeting));
+
+            // when
+            locationService.createLocationVote(request);
+
+            // then
+            verify(participantService, never()).save(any());
+            verify(locationVoteRepository).save(argThat(locationVote ->
+                    locationVote.getDepartureLocation().equals("서울시 성동구")
+            ));
+            assertThat(participant.getLocationVotes()).hasSize(1);
+            assertThat(participant.getLocationVotes().get(0).getDepartureLocation()).isEqualTo("서울시 성동구");
+        }
+    }
+
+    @Nested
+    @DisplayName("participantId 지정 추가 (대리 등록)")
+    class ParticipantIdAdd {
+
+        @Test
+        @DisplayName("participantId 지정 시 해당 참여자에 LocationVote가 연결된다")
+        void createLocationVote_withParticipantId_savesVoteLinkedToParticipant() {
+            // given
+            String meetingId = "meeting-id-555";
+            Meeting meeting = Meeting.ofId(meetingId);
+            Participant participant = Participant.of(meeting, "friend-key", "친구");
+            ReflectionTestUtils.setField(participant, "id", 10L);
+            meeting.addParticipant(participant);
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    meetingId,
+                    "host-key",
+                    10L,
+                    "친구",
+                    "서울시 송파구",
+                    "37.5145430",
+                    "127.1058860"
+            );
+
+            when(meetingRepository.findByIdWithAllAssociations(meetingId)).thenReturn(Optional.of(meeting));
+
+            // when
+            locationService.createLocationVote(request);
+
+            // then
+            verify(participantService, never()).save(any());
+            verify(locationVoteRepository).save(argThat(locationVote ->
+                    locationVote.getDepartureLocation().equals("서울시 송파구")
+            ));
+            assertThat(participant.getLocationVotes()).hasSize(1);
+            assertThat(participant.getLocationVotes().get(0).getDepartureLocation()).isEqualTo("서울시 송파구");
+        }
+
+        @Test
+        @DisplayName("participantId의 참여자가 이미 출발지를 등록했으면 DUPLICATE_LOCATION_VOTE 예외가 발생한다")
+        void createLocationVote_participantAlreadyVoted_throwsDuplicateLocationVote() {
+            // given
+            String meetingId = "meeting-id-555";
+            Meeting meeting = Meeting.ofId(meetingId);
+            LocationPoll locationPoll = LocationPoll.ofId(1L);
+            meeting.addPolls(null, locationPoll);
+            Participant participant = Participant.of(meeting, "friend-key", "친구");
+            ReflectionTestUtils.setField(participant, "id", 10L);
+            participant.addLocationVote(LocationVote.of(
+                    locationPoll, "친구", "서울시 강동구",
+                    new BigDecimal("37.5301930"), new BigDecimal("127.1237560")
+            ));
+            meeting.addParticipant(participant);
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    meetingId,
+                    "host-key",
+                    10L,
+                    "친구",
+                    "서울시 송파구",
+                    "37.5145430",
+                    "127.1058860"
+            );
+
+            when(meetingRepository.findByIdWithAllAssociations(meetingId)).thenReturn(Optional.of(meeting));
+
+            // when & then
+            assertThatThrownBy(() -> locationService.createLocationVote(request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.DUPLICATE_LOCATION_VOTE);
+        }
+
+        @Test
+        @DisplayName("모임에 없는 participantId 지정 시 PARTICIPANT_NOT_FOUND 예외가 발생한다")
+        void createLocationVote_participantNotInMeeting_throwsParticipantNotFound() {
+            // given
+            String meetingId = "meeting-id-555";
+            Meeting meeting = Meeting.ofId(meetingId);
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    meetingId,
+                    "host-key",
+                    999L,
+                    "친구",
+                    "서울시 송파구",
+                    "37.5145430",
+                    "127.1058860"
+            );
+
+            when(meetingRepository.findByIdWithAllAssociations(meetingId)).thenReturn(Optional.of(meeting));
+
+            // when & then
+            assertThatThrownBy(() -> locationService.createLocationVote(request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PARTICIPANT_NOT_FOUND);
+        }
     }
 
     @Nested
@@ -226,6 +397,7 @@ class LocationVoteUnitTest {
         void createLocationVote_outOfServiceArea_throwsException() {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     "meeting-id-123",
+                    null,
                     null,
                     "홍길동",
                     "경북 울릉군 독도",
@@ -247,6 +419,7 @@ class LocationVoteUnitTest {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     "meeting-id-123",
                     null,
+                    null,
                     "홍길동",
                     "제주특별자치도 제주시",
                     "33.4996",
@@ -263,6 +436,7 @@ class LocationVoteUnitTest {
         void createLocationVote_nonNumericCoordinates_throwsException() {
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     "meeting-id-123",
+                    null,
                     null,
                     "홍길동",
                     "서울시 강남구",
@@ -297,17 +471,24 @@ class LocationVoteUnitTest {
     class DuplicateLocalStorageKey {
 
         @Test
-        @DisplayName("일반 참여자가 이미 존재하는 localStorageKey로 요청 시 DUPLICATE_LOCAL_STORAGE_KEY 예외가 발생한다")
-        void createLocationVote_duplicateKeyForNonHost_throwsDuplicateException() {
+        @DisplayName("이미 출발지를 등록한 참여자가 같은 localStorageKey로 재요청 시 DUPLICATE_LOCAL_STORAGE_KEY 예외가 발생한다")
+        void createLocationVote_duplicateKeyForAlreadyVoted_throwsDuplicateException() {
             // given
             String meetingId = "meeting-id-123";
             Meeting meeting = Meeting.ofId(meetingId);
+            LocationPoll locationPoll = LocationPoll.ofId(1L);
+            meeting.addPolls(null, locationPoll);
             Participant existingParticipant = Participant.of(meeting, "duplicate-key", "기존참여자");
+            existingParticipant.addLocationVote(LocationVote.of(
+                    locationPoll, "기존참여자", "서울시 강북구",
+                    new BigDecimal("37.6396320"), new BigDecimal("127.0256320")
+            ));
             meeting.addParticipant(existingParticipant);
 
             CreateLocationVoteRequest request = new CreateLocationVoteRequest(
                     meetingId,
                     "duplicate-key",
+                    null,
                     "새참여자",
                     "서울시 강남구",
                     "37.4979502",

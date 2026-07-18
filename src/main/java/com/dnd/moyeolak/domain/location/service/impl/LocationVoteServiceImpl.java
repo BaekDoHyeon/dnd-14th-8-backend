@@ -76,6 +76,20 @@ public class LocationVoteServiceImpl implements LocationVoteService {
         LocationPoll locationPoll = meeting.getLocationPoll();
         LocationVote locationVote = LocationVote.fromByCreateLocationVoteRequest(locationPoll, request);
 
+        if (request.participantId() != null) {
+            Participant participant = meeting.getParticipants().stream()
+                    .filter(p -> request.participantId().equals(p.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPANT_NOT_FOUND));
+
+            if (!participant.getLocationVotes().isEmpty()) {
+                throw new BusinessException(ErrorCode.DUPLICATE_LOCATION_VOTE);
+            }
+            participant.addLocationVote(locationVote);
+            locationVoteRepository.save(locationVote);
+            return locationVote.getId();
+        }
+
         if (!StringUtils.hasText(request.localStorageKey())) {
             locationVoteRepository.save(locationVote);
             return locationVote.getId();
@@ -86,12 +100,11 @@ public class LocationVoteServiceImpl implements LocationVoteService {
                 .findFirst();
 
         if (existingParticipant.isPresent()) {
-            Participant host = existingParticipant.get();
-            if (!host.isHost() || !host.getLocationVotes().isEmpty()) {
+            Participant participant = existingParticipant.get();
+            if (!participant.getLocationVotes().isEmpty()) {
                 throw new BusinessException(ErrorCode.DUPLICATE_LOCAL_STORAGE_KEY);
             }
-            host.updateName(request.participantName());
-            host.addLocationVote(locationVote);
+            participant.addLocationVote(locationVote);
             locationVoteRepository.save(locationVote);
             return locationVote.getId();
         }
