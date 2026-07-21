@@ -2,6 +2,7 @@ package com.dnd.moyeolak.domain.location.controller;
 
 import com.dnd.moyeolak.domain.location.dto.CenterPointDto;
 import com.dnd.moyeolak.domain.location.dto.MidpointRecommendationResponse;
+import com.dnd.moyeolak.domain.location.enums.MidpointResultType;
 import com.dnd.moyeolak.domain.location.service.LocationVoteService;
 import com.dnd.moyeolak.domain.location.service.MidpointRecommendationService;
 import com.dnd.moyeolak.domain.location.service.NearbyPlaceSearchService;
@@ -68,7 +69,8 @@ class LocationControllerTest {
                 List.of(),
                 null,
                 2,
-                5
+                5,
+                MidpointResultType.NORMAL
         );
         when(midpointRecommendationService.calculateMidpointRecommendations(
                 eq(MEETING_ID), eq(null), eq("203.0.113.10")))

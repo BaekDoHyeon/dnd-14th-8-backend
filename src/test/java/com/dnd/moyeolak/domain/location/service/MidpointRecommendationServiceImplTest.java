@@ -314,7 +314,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations()).extracting("stationName")
                     .containsExactly("역2", "역1");
@@ -343,7 +343,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(null);
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations().getFirst().routes())
                     .extracting("transitReachable").containsExactly(true, false);
@@ -377,7 +377,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(2500, 480, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.resultType().name()).isEqualTo("NEARBY_DEPARTURES");
         }
@@ -408,7 +408,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(1500, 360, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.resultType().name()).isEqualTo("NEARBY_DEPARTURES");
         }
@@ -439,7 +439,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(1200, 300, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations()).extracting("stationName")
                     .containsExactly("홍대입구역", "신촌역", "합정역");
@@ -472,7 +472,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(1200, 300, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             StationRecommendationDto first = response.recommendations().getFirst();
             assertThat(first.stationName()).isEqualTo("홍대입구역");
@@ -506,7 +506,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(1200, 300, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             StationRecommendationDto first = response.recommendations().getFirst();
             assertThat(first.stationName()).isEqualTo("홍대입구역");
@@ -541,7 +541,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(12000, 1800, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.resultType().name()).isEqualTo("NORMAL");
         }

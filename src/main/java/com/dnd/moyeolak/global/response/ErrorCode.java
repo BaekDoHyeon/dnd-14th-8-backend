@@ -35,11 +35,11 @@ public enum ErrorCode {
     KAKAO_API_ERROR("E424", "자동차 경로 조회에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
     INSUFFICIENT_LOCATION_VOTES("E425", "출발지 2개 이상 등록 시 중간지점을 확인할 수 있습니다.", HttpStatus.BAD_REQUEST),
     INVALID_TIME_RANGE("E426", "시작 시간은 종료 시간보다 빨라야 합니다.", HttpStatus.BAD_REQUEST),
-    MIDPOINT_RECOMMENDATION_RATE_LIMIT_EXCEEDED("E427", "중간지점 추천 재계산 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.", HttpStatus.TOO_MANY_REQUESTS),
     OUT_OF_SERVICE_AREA("E427", "서비스 지역(수도권) 밖의 출발지는 등록할 수 없습니다.", HttpStatus.BAD_REQUEST),
     ROUTE_NOT_FOUND("E428", "출발지에서 도착역까지 이동 경로를 찾을 수 없습니다.", HttpStatus.UNPROCESSABLE_ENTITY),
     NO_REACHABLE_STATIONS("E429", "출발지에서 대중교통으로 도달 가능한 후보 역이 없습니다.", HttpStatus.UNPROCESSABLE_ENTITY),
     DUPLICATE_LOCATION_VOTE("E430", "이미 출발지를 등록한 참여자입니다.", HttpStatus.CONFLICT),
+    MIDPOINT_RECOMMENDATION_RATE_LIMIT_EXCEEDED("E431", "중간지점 추천 재계산 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.", HttpStatus.TOO_MANY_REQUESTS),
 
     // 서버 오류
     SERVER_ERROR("E500", "서버 내부 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
