@@ -6,3 +6,11 @@ spring:
   threads:
     virtual:
       enabled: true
+
+moyeolak:
+  rate-limit:
+    midpoint-recommendation:
+      enabled: true
+      meeting-daily-limit: 20
+      ip-minute-limit: 5
+      ip-daily-limit: 100

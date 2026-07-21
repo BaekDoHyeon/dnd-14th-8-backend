@@ -15,6 +15,7 @@ import com.dnd.moyeolak.global.client.google.GoogleRoutesClient;
 import com.dnd.moyeolak.global.client.kakao.KakaoDirectionsClient;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoDirectionsResponse;
 import com.dnd.moyeolak.global.exception.BusinessException;
+import com.dnd.moyeolak.global.ratelimit.MidpointRecommendationUsageLimiter;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
 import com.dnd.moyeolak.global.station.repository.StationRepository;
@@ -40,9 +41,12 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class MidpointRecommendationServiceImplTest {
@@ -62,6 +66,9 @@ class MidpointRecommendationServiceImplTest {
     @Mock
     private KakaoDirectionsClient kakaoDirectionsClient;
 
+    @Mock
+    private MidpointRecommendationUsageLimiter usageLimiter;
+
     @InjectMocks
     private MidpointRecommendationServiceImpl midpointRecommendationService;
 
@@ -78,7 +85,7 @@ class MidpointRecommendationServiceImplTest {
             when(meetingService.get(MEETING_ID)).thenReturn(meeting);
             when(meeting.getLocationPoll()).thenReturn(null);
 
-            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
+            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LOCATION_POLL_NOT_FOUND);
         }
@@ -94,7 +101,7 @@ class MidpointRecommendationServiceImplTest {
             when(locationPoll.getId()).thenReturn(1L);
             when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(Collections.emptyList());
 
-            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
+            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INSUFFICIENT_LOCATION_VOTES)
                     .satisfies(ex -> {
@@ -115,7 +122,7 @@ class MidpointRecommendationServiceImplTest {
             when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
                     .thenReturn(Collections.emptyList());
 
-            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
+            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_NEARBY_STATIONS);
         }
@@ -137,9 +144,36 @@ class MidpointRecommendationServiceImplTest {
                             List.of(TransitRouteResult.unreachable())
                     ));
 
-            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null))
+            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_REACHABLE_STATIONS);
+        }
+
+        @Test
+        @DisplayName("재계산 제한을 초과하면 외부 API를 호출하지 않고 429 예외가 발생한다")
+        void throwsRateLimitExceededBeforeCallingExternalApis() {
+            mockMeetingWithLocationPoll();
+            LocationVote vote1 = createMockVote("37.5000", "127.0000", "참가자A", "서울시 강남구");
+            LocationVote vote2 = createMockVote("37.5100", "127.0100", "참가자B", "서울시 강동구");
+            when(locationVoteRepository.findByLocationPoll_Id(1L)).thenReturn(List.of(vote1, vote2));
+            when(stationRepository.calculateCentroid(any())).thenThrow(new RuntimeException("PostGIS 미지원"));
+            Station station = createMockStation(1L, "강남역", "2호선", 37.4979, 127.0276);
+            when(stationRepository.findNearbyStations(anyDouble(), anyDouble(), anyInt(), anyInt()))
+                    .thenReturn(List.of(station));
+            doThrow(new BusinessException(ErrorCode.MIDPOINT_RECOMMENDATION_RATE_LIMIT_EXCEEDED))
+                    .when(usageLimiter).checkAndIncrease(eq(MEETING_ID), eq("203.0.113.10"));
+
+            assertThatThrownBy(() -> midpointRecommendationService.calculateMidpointRecommendations(
+                    MEETING_ID, null, "203.0.113.10"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue(
+                            "errorCode",
+                            ErrorCode.MIDPOINT_RECOMMENDATION_RATE_LIMIT_EXCEEDED
+                    );
+
+            verify(googleRoutesClient, never()).computeTransitMatrix(anyList(), anyList(), any());
+            verify(kakaoDirectionsClient, never())
+                    .requestDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any());
         }
     }
 
@@ -172,7 +206,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(12000, 1800, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.centerPoint().latitude()).isEqualTo(37.525);
             assertThat(response.centerPoint().longitude()).isEqualTo(126.975);
@@ -220,7 +254,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations()).hasSize(3);
             assertThat(response.recommendations()).extracting("stationName")
@@ -251,7 +285,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(null);
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations()).hasSize(1);
             assertThat(response.recommendations().getFirst().routes())
@@ -539,7 +573,7 @@ class MidpointRecommendationServiceImplTest {
                     .thenReturn(new KakaoDirectionsResponse.Summary(5000, 600, null));
 
             MidpointRecommendationResponse response =
-                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null);
+                    midpointRecommendationService.calculateMidpointRecommendations(MEETING_ID, null, "unknown");
 
             assertThat(response.recommendations().getFirst().routes().getFirst().departureName())
                     .isEqualTo("김참가자");

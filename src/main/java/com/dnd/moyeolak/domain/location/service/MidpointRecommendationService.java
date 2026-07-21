@@ -6,5 +6,9 @@ import java.time.LocalDateTime;
 
 public interface MidpointRecommendationService {
 
-    MidpointRecommendationResponse calculateMidpointRecommendations(String meetingId, LocalDateTime departureTime);
+    MidpointRecommendationResponse calculateMidpointRecommendations(
+            String meetingId,
+            LocalDateTime departureTime,
+            String clientIp
+    );
 }

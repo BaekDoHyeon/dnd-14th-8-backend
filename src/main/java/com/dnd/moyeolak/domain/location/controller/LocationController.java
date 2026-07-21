@@ -17,10 +17,12 @@ import com.dnd.moyeolak.domain.location.service.MidpointRecommendationService;
 import com.dnd.moyeolak.domain.location.service.PersonalRouteQueryService;
 import com.dnd.moyeolak.domain.location.service.NearbyPlaceSearchService;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateLocationVoteRequest;
+import com.dnd.moyeolak.global.ratelimit.ClientIpResolver;
 import com.dnd.moyeolak.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,6 +43,7 @@ public class LocationController {
     private final MidpointRecommendationService midpointRecommendationService;
     private final PersonalRouteQueryService personalRouteQueryService;
     private final NearbyPlaceSearchService nearbyPlaceSearchService;
+    private final ClientIpResolver clientIpResolver;
 
     @GetMapping("/midpoint-recommendations")
     @GetMidpointRecommendationsApiDocs
@@ -48,10 +51,12 @@ public class LocationController {
             @Parameter(description = "모임 ID", example = "test-meeting-001", required = true)
             @RequestParam String meetingId,
             @Parameter(description = "출발 시간 (미입력 시 현재 시각 기준)", example = "2026-02-18T10:30:00")
-            @RequestParam(required = false) LocalDateTime departureTime
+            @RequestParam(required = false) LocalDateTime departureTime,
+            HttpServletRequest request
     ) {
+        String clientIp = clientIpResolver.resolve(request);
         MidpointRecommendationResponse response =
-                midpointRecommendationService.calculateMidpointRecommendations(meetingId, departureTime);
+                midpointRecommendationService.calculateMidpointRecommendations(meetingId, departureTime, clientIp);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
