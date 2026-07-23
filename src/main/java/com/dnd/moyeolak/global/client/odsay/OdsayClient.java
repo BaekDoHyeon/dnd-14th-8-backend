@@ -4,6 +4,9 @@ import tools.jackson.databind.ObjectMapper;
 import com.dnd.moyeolak.global.client.odsay.config.OdsayApiConfig;
 import com.dnd.moyeolak.global.client.odsay.dto.OdsayPathInfo;
 import com.dnd.moyeolak.global.client.odsay.dto.OdsayPathResponse;
+import com.dnd.moyeolak.global.metrics.ExternalApi;
+import com.dnd.moyeolak.global.metrics.ExternalApiErrorType;
+import com.dnd.moyeolak.global.metrics.ExternalApiMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -11,6 +14,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.Duration;
 import java.util.concurrent.Semaphore;
 
 @Slf4j
@@ -19,6 +23,7 @@ public class OdsayClient {
 
     private final RestTemplate odsayRestTemplate;
     private final OdsayApiConfig odsayApiConfig;
+    private final ExternalApiMetrics metrics;
 
     private static final String ODSAY_PATH_API_URL = "https://api.odsay.com/v1/api/searchPubTransPathT";
     private static final int MAX_CONCURRENT_REQUESTS = 5;
@@ -29,10 +34,12 @@ public class OdsayClient {
 
     public OdsayClient(
         @Qualifier("odsayRestTemplate") RestTemplate odsayRestTemplate,
-        OdsayApiConfig odsayApiConfig
+        OdsayApiConfig odsayApiConfig,
+        ExternalApiMetrics metrics
     ) {
         this.odsayRestTemplate = odsayRestTemplate;
         this.odsayApiConfig = odsayApiConfig;
+        this.metrics = metrics;
     }
 
     public OdsayPathInfo searchRoute(
@@ -55,6 +62,7 @@ public class OdsayClient {
         log.debug("ODsay API 요청: startLat={}, startLng={}, endLat={}, endLng={}",
             startLat, startLng, endLat, endLng);
 
+        long startNanos = System.nanoTime();
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 rateLimiter.acquire();
@@ -66,13 +74,16 @@ public class OdsayClient {
                     OdsayPathResponse response = mapper.readValue(rawResponse, OdsayPathResponse.class);
 
                     if (response != null && response.result() != null && !response.result().path().isEmpty()) {
+                        metrics.recordSuccess(ExternalApi.ODSAY, elapsedSince(startNanos));
                         return response.result().path().get(0).info();
                     }
 
                     log.warn("ODsay API 응답이 비어있습니다.");
+                    metrics.recordFailure(ExternalApi.ODSAY, ExternalApiErrorType.BODY_ERROR, elapsedSince(startNanos));
                     return new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0);
                 } catch (HttpClientErrorException.TooManyRequests e) {
                     log.warn("ODsay API 429 rate limit, 재시도 {}/{}", attempt + 1, MAX_RETRIES);
+                    metrics.recordRateLimited(ExternalApi.ODSAY);
                     long backoff = INITIAL_BACKOFF_MS * (1L << attempt);
                     Thread.sleep(backoff);
                     // finally 실행 후 다음 attempt로 계속
@@ -82,14 +93,21 @@ public class OdsayClient {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 log.error("ODsay API 호출 중 인터럽트 발생");
+                metrics.recordFailure(ExternalApi.ODSAY, ExternalApiErrorType.UNKNOWN, elapsedSince(startNanos));
                 return new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0);
             } catch (Exception e) {
                 log.error("ODsay API 호출 실패: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+                metrics.recordFailure(ExternalApi.ODSAY, ExternalApiErrorType.classify(e), elapsedSince(startNanos));
                 return new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0);
             }
         }
 
         log.error("ODsay API 최대 재시도 횟수 초과");
+        metrics.recordFailure(ExternalApi.ODSAY, ExternalApiErrorType.CLIENT_4XX, elapsedSince(startNanos));
         return new OdsayPathInfo(999, 0, 0, 0, 0, 0, 0);
+    }
+
+    private static Duration elapsedSince(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos);
     }
 }

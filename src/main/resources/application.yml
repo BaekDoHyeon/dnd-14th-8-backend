@@ -7,6 +7,25 @@ spring:
     virtual:
       enabled: true
 
+# 관리자 통계 대시보드 공유 토큰. 미설정 시 /api/admin/** 는 잠긴다(기본 안전).
+admin:
+  token: ${ADMIN_TOKEN:}
+
+# 외부 API 호출 통계 (관리자 대시보드)
+external-api:
+  metrics:
+    snapshot-interval-ms: 300000      # 스냅샷 적재 주기 5분
+    snapshot-initial-delay-ms: 0
+    retention-days: 30                # 스냅샷 보관 기간
+    cleanup-cron: "0 30 4 * * *"      # 매일 04:30 오래된 스냅샷 정리
+  stats:
+    # 일일 한도 (2026-07 기준 조사값, 계정 상태에 맞게 조정)
+    odsay-daily-quota: 1000           # ODsay Basic(무료)
+    kakao-local-daily-quota: 100000
+    kakao-directions-daily-quota: 100000
+    # Google 과금 단가 (Basic 티어, USD). FieldMask가 Advanced 이상이면 상향 필요
+    google-compute-routes-per-request: 0.005
+    google-route-matrix-per-element: 0.005
 moyeolak:
   rate-limit:
     midpoint-recommendation:

@@ -5,7 +5,10 @@ import com.dnd.moyeolak.domain.location.dto.TransitRouteResult;
 import com.dnd.moyeolak.global.client.google.config.GoogleRoutesApiConfig;
 import com.dnd.moyeolak.global.client.google.dto.LatLng;
 import com.dnd.moyeolak.global.exception.BusinessException;
+import com.dnd.moyeolak.global.metrics.ExternalApiMetrics;
 import com.dnd.moyeolak.global.response.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,12 +36,15 @@ class GoogleRoutesClientTest {
     private RestTemplate restTemplate;
     private MockRestServiceServer server;
     private GoogleRoutesClient client;
+    private MeterRegistry registry;
 
     @BeforeEach
     void setUp() {
         restTemplate = new RestTemplate();
         server = MockRestServiceServer.bindTo(restTemplate).build();
-        client = new GoogleRoutesClient(restTemplate, new GoogleRoutesApiConfig("test-google-key"));
+        registry = new SimpleMeterRegistry();
+        client = new GoogleRoutesClient(
+                restTemplate, new GoogleRoutesApiConfig("test-google-key"), new ExternalApiMetrics(registry));
     }
 
     @Test
@@ -209,5 +215,39 @@ class GoogleRoutesClientTest {
                 new LatLng(37.55, 126.97), new LatLng(37.56, 126.80), null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GOOGLE_API_ERROR);
+    }
+
+    @Test
+    @DisplayName("매트릭스 성공 시 성공 카운터와 route_matrix 과금 단위(엘리먼트 수)가 기록된다")
+    void recordsMetricsOnMatrixSuccess() {
+        server.expect(requestTo(MATRIX_URL))
+                .andRespond(withSuccess("""
+                        [{"originIndex":0,"destinationIndex":0,"condition":"ROUTE_EXISTS","distanceMeters":9000,"duration":"1200s"}]
+                        """, MediaType.APPLICATION_JSON));
+
+        // 2 origins x 2 destinations = 4 elements
+        client.computeTransitMatrix(
+                List.of(new LatLng(37.5, 127.0), new LatLng(37.55, 126.95)),
+                List.of(new LatLng(37.5495, 126.9137), new LatLng(37.4979, 127.0276)),
+                null);
+
+        assertThat(registry.get("external.api.calls")
+                .tags("api", "google_routes", "outcome", "success").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("external.api.google.billable_units")
+                .tags("sku", "route_matrix").counter().count()).isEqualTo(4.0);
+    }
+
+    @Test
+    @DisplayName("단건 경로 호출이 5xx로 실패하면 failure 카운터가 error_type=5xx로 기록된다")
+    void recordsMetricsOnRouteServerError() {
+        server.expect(requestTo(ROUTES_URL)).andRespond(withServerError());
+
+        assertThatThrownBy(() -> client.computeTransitRoute(
+                new LatLng(37.55, 126.97), new LatLng(37.56, 126.80), null))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(registry.get("external.api.calls")
+                .tags("api", "google_routes", "outcome", "failure", "error_type", "5xx")
+                .counter().count()).isEqualTo(1.0);
     }
 }

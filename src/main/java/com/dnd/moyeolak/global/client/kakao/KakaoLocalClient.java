@@ -5,6 +5,9 @@ import com.dnd.moyeolak.global.client.kakao.dto.CategorySearchResponse;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoLocalResponse;
 import com.dnd.moyeolak.global.client.kakao.dto.KakaoKeywordSearchRequest;
 import com.dnd.moyeolak.global.client.kakao.dto.SubwayStation;
+import com.dnd.moyeolak.global.metrics.ExternalApi;
+import com.dnd.moyeolak.global.metrics.ExternalApiErrorType;
+import com.dnd.moyeolak.global.metrics.ExternalApiMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
@@ -16,6 +19,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 
 @Slf4j
@@ -24,6 +28,7 @@ public class KakaoLocalClient {
 
     private final RestTemplate kakaoRestTemplate;
     private final KakaoApiConfig kakaoApiConfig;
+    private final ExternalApiMetrics metrics;
 
     private static final String KAKAO_LOCAL_BASE_URL = "https://dapi.kakao.com/v2/local/search";
     private static final String KAKAO_LOCAL_API_URL = "https://dapi.kakao.com/v2/local/search/category.json";
@@ -31,10 +36,12 @@ public class KakaoLocalClient {
 
     public KakaoLocalClient(
         @Qualifier("kakaoRestTemplate") RestTemplate kakaoRestTemplate,
-        KakaoApiConfig kakaoApiConfig
+        KakaoApiConfig kakaoApiConfig,
+        ExternalApiMetrics metrics
     ) {
         this.kakaoRestTemplate = kakaoRestTemplate;
         this.kakaoApiConfig = kakaoApiConfig;
+        this.metrics = metrics;
     }
 
     public List<SubwayStation> findNearestSubwayStations(
@@ -57,6 +64,7 @@ public class KakaoLocalClient {
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
+        long startNanos = System.nanoTime();
         try {
             ResponseEntity<KakaoLocalResponse> response = kakaoRestTemplate.exchange(
                 url,
@@ -67,10 +75,12 @@ public class KakaoLocalClient {
 
             if (response.getBody() == null) {
                 log.warn("Kakao Local API 응답이 비어있습니다.");
+                metrics.recordFailure(ExternalApi.KAKAO_LOCAL, ExternalApiErrorType.BODY_ERROR,
+                        elapsedSince(startNanos));
                 return List.of();
             }
 
-            return response.getBody()
+            List<SubwayStation> stations = response.getBody()
                 .documents()
                 .stream()
                 .limit(limit)
@@ -83,11 +93,19 @@ public class KakaoLocalClient {
                     Integer.parseInt(doc.distance())
                 ))
                 .toList();
+            metrics.recordSuccess(ExternalApi.KAKAO_LOCAL, elapsedSince(startNanos));
+            return stations;
 
         } catch (Exception e) {
             log.error("Kakao Local API 호출 실패: {}", e.getMessage());
+            metrics.recordFailure(ExternalApi.KAKAO_LOCAL, ExternalApiErrorType.classify(e),
+                    elapsedSince(startNanos));
             throw new RuntimeException("지하철역 검색에 실패했습니다.", e);
         }
+    }
+
+    private static Duration elapsedSince(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos);
     }
 
     /**
@@ -119,13 +137,20 @@ public class KakaoLocalClient {
 
         URI uri = builder.build().encode().toUri();
 
-        ResponseEntity<CategorySearchResponse> response = kakaoRestTemplate.exchange(
-                uri,
-                HttpMethod.GET,
-                entity,
-                CategorySearchResponse.class
-        );
-
-        return response.getBody();
+        long startNanos = System.nanoTime();
+        try {
+            ResponseEntity<CategorySearchResponse> response = kakaoRestTemplate.exchange(
+                    uri,
+                    HttpMethod.GET,
+                    entity,
+                    CategorySearchResponse.class
+            );
+            metrics.recordSuccess(ExternalApi.KAKAO_LOCAL, elapsedSince(startNanos));
+            return response.getBody();
+        } catch (RuntimeException e) {
+            metrics.recordFailure(ExternalApi.KAKAO_LOCAL, ExternalApiErrorType.classify(e),
+                    elapsedSince(startNanos));
+            throw e;
+        }
     }
 }

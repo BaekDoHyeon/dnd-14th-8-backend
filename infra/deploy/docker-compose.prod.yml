@@ -33,6 +33,8 @@ services:
       ODSAY_API_KEY: ${ODSAY_API_KEY}
       SWAGGER_SERVER_URL: ${SWAGGER_SERVER_URL}
       TZ: Asia/Seoul
+      # 관리자 통계 대시보드 토큰. 서버 /app/moyeolak/.env 에 정의. 미설정 시 /api/admin/** 잠김.
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
       # 2GB 인스턴스에서 힙 폭주 방지
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0 -Duser.timezone=Asia/Seoul"
     volumes:

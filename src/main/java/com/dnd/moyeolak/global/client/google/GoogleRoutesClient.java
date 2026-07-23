@@ -9,6 +9,10 @@ import com.dnd.moyeolak.global.client.google.dto.LatLng;
 import com.dnd.moyeolak.global.client.google.dto.RouteMatrixEntry;
 import com.dnd.moyeolak.global.client.google.dto.RouteMatrixRequest;
 import com.dnd.moyeolak.global.exception.BusinessException;
+import com.dnd.moyeolak.global.metrics.ExternalApi;
+import com.dnd.moyeolak.global.metrics.ExternalApiErrorType;
+import com.dnd.moyeolak.global.metrics.ExternalApiMetrics;
+import com.dnd.moyeolak.global.metrics.GoogleSku;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,6 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -45,13 +50,16 @@ public class GoogleRoutesClient {
 
     private final RestTemplate restTemplate;
     private final GoogleRoutesApiConfig config;
+    private final ExternalApiMetrics metrics;
 
     public GoogleRoutesClient(
             @Qualifier("googleRoutesRestTemplate") RestTemplate restTemplate,
-            GoogleRoutesApiConfig config
+            GoogleRoutesApiConfig config,
+            ExternalApiMetrics metrics
     ) {
         this.restTemplate = restTemplate;
         this.config = config;
+        this.metrics = metrics;
     }
 
     public List<List<TransitRouteResult>> computeTransitMatrix(
@@ -94,19 +102,26 @@ public class GoogleRoutesClient {
                 origin, destination, TRAVEL_MODE_TRANSIT, toRfc3339(departureTime));
 
         ComputeRoutesResponse response;
+        long startNanos = System.nanoTime();
         try {
             response = restTemplate.postForObject(
                     ROUTES_URL, new HttpEntity<>(body, headers(ROUTE_FIELD_MASK)), ComputeRoutesResponse.class);
         } catch (RestClientException e) {
+            metrics.recordFailure(ExternalApi.GOOGLE_ROUTES, ExternalApiErrorType.classify(e),
+                    Duration.ofNanos(System.nanoTime() - startNanos));
             log.error("Google Routes 단건 경로 호출 실패: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
         }
 
         if (response == null || response.routes() == null || response.routes().isEmpty()) {
+            metrics.recordFailure(ExternalApi.GOOGLE_ROUTES, ExternalApiErrorType.BODY_ERROR,
+                    Duration.ofNanos(System.nanoTime() - startNanos));
             log.error("Google Routes 단건 경로 응답이 비어있습니다.");
             throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
         }
 
+        metrics.recordSuccess(ExternalApi.GOOGLE_ROUTES, Duration.ofNanos(System.nanoTime() - startNanos));
+        metrics.recordGoogleBillableUnits(GoogleSku.COMPUTE_ROUTES, 1);
         ComputeRoutesResponse.Route route = response.routes().getFirst();
         return new TransitRouteDetailDto(
                 route.durationMinutes(),
@@ -125,15 +140,23 @@ public class GoogleRoutesClient {
         RouteMatrixRequest body = RouteMatrixRequest.of(
                 origins, destinations, TRAVEL_MODE_TRANSIT, toRfc3339(departureTime));
 
+        int elements = origins.size() * destinations.size();
+        long startNanos = System.nanoTime();
         try {
             RouteMatrixEntry[] entries = restTemplate.postForObject(
                     MATRIX_URL, new HttpEntity<>(body, headers(MATRIX_FIELD_MASK)), RouteMatrixEntry[].class);
             if (entries == null) {
+                metrics.recordFailure(ExternalApi.GOOGLE_ROUTES, ExternalApiErrorType.BODY_ERROR,
+                        Duration.ofNanos(System.nanoTime() - startNanos));
                 log.error("Google Routes 매트릭스 응답이 비어있습니다.");
                 throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
             }
+            metrics.recordSuccess(ExternalApi.GOOGLE_ROUTES, Duration.ofNanos(System.nanoTime() - startNanos));
+            metrics.recordGoogleBillableUnits(GoogleSku.ROUTE_MATRIX, elements);
             return entries;
         } catch (RestClientException e) {
+            metrics.recordFailure(ExternalApi.GOOGLE_ROUTES, ExternalApiErrorType.classify(e),
+                    Duration.ofNanos(System.nanoTime() - startNanos));
             log.error("Google Routes 매트릭스 호출 실패: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             throw new BusinessException(ErrorCode.GOOGLE_API_ERROR);
         }
