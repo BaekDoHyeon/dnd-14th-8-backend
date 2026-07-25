@@ -14,7 +14,9 @@ import com.dnd.moyeolak.domain.participant.service.ParticipantService;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -30,12 +32,15 @@ public class LocationVoteServiceImpl implements LocationVoteService {
     private final MeetingRepository meetingRepository;
     private final ParticipantService participantService;
     private final LocationVoteRepository locationVoteRepository;
+    private final CacheManager cacheManager;
 
     // 수도권 전철망 커버리지 기준 서비스 지역 (남: 신창 36.77, 북: 소요산 37.95, 서: 인천 126.45, 동: 춘천 127.73 + 여유분)
     private static final double SERVICE_AREA_MIN_LAT = 36.5;
     private static final double SERVICE_AREA_MAX_LAT = 38.2;
     private static final double SERVICE_AREA_MIN_LNG = 126.2;
     private static final double SERVICE_AREA_MAX_LNG = 128.0;
+
+    private static final String MIDPOINT_CACHE_NAME = "midpointRecommendations";
 
     @Override
     public List<LocationVoteResponse> listLocationVote(String meetingId) {
@@ -55,18 +60,19 @@ public class LocationVoteServiceImpl implements LocationVoteService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "midpointRecommendations", allEntries = true)
     public void updateLocationVote(Long locationVoteId, UpdateLocationVoteRequest request) {
         validateServiceArea(request.departureLat(), request.departureLng());
 
         LocationVote locationVote = locationVoteRepository.findById(locationVoteId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_VOTE_NOT_FOUND));
+        String meetingId = locationVote.getLocationPoll().getMeeting().getId();
         locationVote.update(request);
+
+        evictMidpointCache(meetingId);
     }
 
     @Override
     @Transactional
-    @CacheEvict(value = "midpointRecommendations", allEntries = true)
     public Long createLocationVote(CreateLocationVoteRequest request) {
         validateServiceArea(request.departureLat(), request.departureLng());
 
@@ -87,11 +93,13 @@ public class LocationVoteServiceImpl implements LocationVoteService {
             }
             participant.addLocationVote(locationVote);
             locationVoteRepository.save(locationVote);
+            evictMidpointCache(request.meetingId());
             return locationVote.getId();
         }
 
         if (!StringUtils.hasText(request.localStorageKey())) {
             locationVoteRepository.save(locationVote);
+            evictMidpointCache(request.meetingId());
             return locationVote.getId();
         }
 
@@ -106,6 +114,7 @@ public class LocationVoteServiceImpl implements LocationVoteService {
             }
             participant.addLocationVote(locationVote);
             locationVoteRepository.save(locationVote);
+            evictMidpointCache(request.meetingId());
             return locationVote.getId();
         }
 
@@ -113,8 +122,21 @@ public class LocationVoteServiceImpl implements LocationVoteService {
                 Meeting.ofId(request.meetingId()), request.localStorageKey(), request.participantName(), locationVote
         );
         participantService.save(participant);
+        evictMidpointCache(request.meetingId());
 
         return locationVote.getId();
+    }
+
+    /**
+     * 캐시 키가 {@code meetingId + '_' + departureTime} 형태이므로, {@code meetingId} prefix로 시작하는
+     * 엔트리만 골라 지운다. {@code @CacheEvict(allEntries = true)}처럼 무관한 모임의 캐시까지 지우지 않기 위함.
+     */
+    private void evictMidpointCache(String meetingId) {
+        Cache cache = cacheManager.getCache(MIDPOINT_CACHE_NAME);
+        if (cache instanceof CaffeineCache caffeineCache) {
+            caffeineCache.getNativeCache().asMap().keySet()
+                    .removeIf(key -> key.toString().startsWith(meetingId + "_"));
+        }
     }
 
     private void validateServiceArea(String departureLat, String departureLng) {
@@ -135,10 +157,12 @@ public class LocationVoteServiceImpl implements LocationVoteService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "midpointRecommendations", allEntries = true)
     public void deleteLocationVote(Long locationVoteId) {
         LocationVote locationVote = locationVoteRepository.findById(locationVoteId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LOCATION_VOTE_NOT_FOUND));
+        String meetingId = locationVote.getLocationPoll().getMeeting().getId();
         locationVoteRepository.delete(locationVote);
+
+        evictMidpointCache(meetingId);
     }
 }

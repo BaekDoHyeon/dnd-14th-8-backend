@@ -21,9 +21,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -35,7 +36,6 @@ import java.util.stream.IntStream;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class MidpointRecommendationServiceImpl implements MidpointRecommendationService {
 
     private final MeetingService meetingService;
@@ -44,6 +44,7 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
     private final GoogleRoutesClient googleRoutesClient;
     private final KakaoDirectionsClient kakaoDirectionsClient;
     private final MidpointRecommendationUsageLimiter usageLimiter;
+    private final TransactionTemplate readOnlyTransactionTemplate;
 
     private static final int SEARCH_RADIUS_METERS = 5000;
     private static final int MAX_CANDIDATE_STATIONS = 10;
@@ -54,15 +55,56 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
     private static final int WALKING_SPEED_METERS_PER_MINUTE = 80;
     // KakaoDirectionsClient의 Semaphore 허용치(5)에 맞춘 병렬도 — 더 늘려도 세마포어에서 대기만 한다
     private static final int DRIVING_ENRICHMENT_THREADS = 5;
+    // 캐시 키 계산에만 쓰는 출발 시각 라운딩 단위 — 실제 외부 API 호출에 넘기는 departureTime에는 영향 없음
+    private static final int CACHE_KEY_ROUND_MINUTES = 10;
 
     @Override
-    @Cacheable(value = "midpointRecommendations", key = "#meetingId + '_' + #departureTime")
+    @Cacheable(value = "midpointRecommendations",
+            key = "#meetingId + '_' + T(com.dnd.moyeolak.domain.location.service.impl.MidpointRecommendationServiceImpl)"
+                    + ".roundDepartureTimeForCacheKey(#departureTime)")
     public MidpointRecommendationResponse calculateMidpointRecommendations(
             String meetingId,
             LocalDateTime departureTime,
             String clientIp
     ) {
-        // 1. 출발지 데이터 조회
+        // 1~3. 출발지/무게중심/후보역 조회 — DB 조회만 짧은 트랜잭션으로 묶고,
+        // Google/Kakao 외부 API 호출은 트랜잭션 밖에서 수행해 DB 커넥션 점유 시간을 줄인다.
+        MidpointQueryResult queryResult = readOnlyTransactionTemplate.execute(status -> loadQueryResult(meetingId));
+
+        usageLimiter.checkAndIncrease(meetingId, clientIp);
+
+        // 4. Google 매트릭스 1회로 전 후보역의 대중교통 시간 계산
+        List<List<TransitRouteResult>> transitMatrix = googleRoutesClient.computeTransitMatrix(
+                queryResult.votes().stream()
+                        .map(v -> new LatLng(v.getDepartureLat().doubleValue(), v.getDepartureLng().doubleValue()))
+                        .toList(),
+                queryResult.candidateStations().stream()
+                        .map(s -> new LatLng(s.getLatitude(), s.getLongitude()))
+                        .toList(),
+                departureTime
+        );
+
+        // 5. 평균 대중교통 시간으로 Top 3 선정
+        List<StationEvaluation> topStations = selectTopStations(
+                queryResult.votes(), queryResult.candidateStations(), transitMatrix, queryResult.centerPoint()
+        );
+
+        // 6. Top 3에만 Kakao 자동차 경로 보강 후 응답 조립
+        List<StationRecommendationDto> recommendations =
+                buildRecommendations(queryResult.votes(), topStations, departureTime);
+        MidpointResultType resultType = resolveResultType(queryResult.votes(), recommendations);
+
+        return new MidpointRecommendationResponse(
+                queryResult.centerPoint(), recommendations, departureTime,
+                queryResult.votes().size(), queryResult.participantCount(), resultType
+        );
+    }
+
+    /**
+     * meeting/출발지 투표 조회 → 무게중심 계산 → 후보역 검색까지의 DB 조회 구간.
+     * {@link #calculateMidpointRecommendations}에서 {@code readOnlyTransactionTemplate}으로 감싸 호출한다.
+     */
+    private MidpointQueryResult loadQueryResult(String meetingId) {
         Meeting meeting = meetingService.get(meetingId);
         LocationPoll locationPoll = meeting.getLocationPoll();
         if (locationPoll == null) {
@@ -77,11 +119,9 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
             );
         }
 
-        // 2. PostGIS로 무게중심 계산
         CenterPointDto centerPoint = calculateCentroid(votes);
         log.info("무게중심 계산 완료: lat={}, lng={}", centerPoint.latitude(), centerPoint.longitude());
 
-        // 3. PostGIS로 근처 지하철역 검색
         List<Station> candidateStations = stationRepository.findNearbyStations(
                 centerPoint.latitude(),
                 centerPoint.longitude(),
@@ -93,31 +133,27 @@ public class MidpointRecommendationServiceImpl implements MidpointRecommendation
         }
         log.info("후보 지하철역 {}개 검색 완료", candidateStations.size());
 
-        usageLimiter.checkAndIncrease(meetingId, clientIp);
-
-        // 4. Google 매트릭스 1회로 전 후보역의 대중교통 시간 계산
-        List<List<TransitRouteResult>> transitMatrix = googleRoutesClient.computeTransitMatrix(
-                votes.stream()
-                        .map(v -> new LatLng(v.getDepartureLat().doubleValue(), v.getDepartureLng().doubleValue()))
-                        .toList(),
-                candidateStations.stream()
-                        .map(s -> new LatLng(s.getLatitude(), s.getLongitude()))
-                        .toList(),
-                departureTime
-        );
-
-        // 5. 평균 대중교통 시간으로 Top 3 선정
-        List<StationEvaluation> topStations = selectTopStations(votes, candidateStations, transitMatrix, centerPoint);
-
-        // 6. Top 3에만 Kakao 자동차 경로 보강 후 응답 조립
-        List<StationRecommendationDto> recommendations = buildRecommendations(votes, topStations, departureTime);
-        MidpointResultType resultType = resolveResultType(votes, recommendations);
-
-        return new MidpointRecommendationResponse(
-                centerPoint, recommendations, departureTime,
-                votes.size(), meeting.getParticipantCount(), resultType
-        );
+        return new MidpointQueryResult(votes, centerPoint, candidateStations, meeting.getParticipantCount());
     }
+
+    /**
+     * 캐시 키 계산에만 사용하는 출발 시각 정규화. {@code departureTime}이 null이면(=지금 출발) 고정 버킷을 쓰고,
+     * 값이 있으면 {@link #CACHE_KEY_ROUND_MINUTES}분 단위로 내림해 초 단위 차이로 캐시가 무력화되지 않게 한다.
+     */
+    public static String roundDepartureTimeForCacheKey(LocalDateTime departureTime) {
+        if (departureTime == null) {
+            return "now";
+        }
+        int roundedMinute = (departureTime.getMinute() / CACHE_KEY_ROUND_MINUTES) * CACHE_KEY_ROUND_MINUTES;
+        return departureTime.withMinute(roundedMinute).truncatedTo(ChronoUnit.MINUTES).toString();
+    }
+
+    private record MidpointQueryResult(
+            List<LocationVote> votes,
+            CenterPointDto centerPoint,
+            List<Station> candidateStations,
+            int participantCount
+    ) {}
 
     private MidpointResultType resolveResultType(List<LocationVote> votes, List<StationRecommendationDto> recommendations) {
         if (votes.size() < 2 || recommendations.isEmpty()) {

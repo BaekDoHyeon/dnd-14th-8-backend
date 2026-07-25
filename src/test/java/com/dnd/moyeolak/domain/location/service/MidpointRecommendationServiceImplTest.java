@@ -19,6 +19,7 @@ import com.dnd.moyeolak.global.ratelimit.MidpointRecommendationUsageLimiter;
 import com.dnd.moyeolak.global.response.ErrorCode;
 import com.dnd.moyeolak.global.station.entity.Station;
 import com.dnd.moyeolak.global.station.repository.StationRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,8 +27,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
@@ -69,10 +73,22 @@ class MidpointRecommendationServiceImplTest {
     @Mock
     private MidpointRecommendationUsageLimiter usageLimiter;
 
+    @Mock
+    private TransactionTemplate readOnlyTransactionTemplate;
+
     @InjectMocks
     private MidpointRecommendationServiceImpl midpointRecommendationService;
 
     private static final String MEETING_ID = "meeting-123";
+
+    @BeforeEach
+    void setUpTransactionTemplate() {
+        // 실제 트랜잭션 없이 콜백을 즉시 실행 — DB 조회 구간만 트랜잭션으로 감싸는 구조를 단위 테스트에서 재현한다
+        lenient().when(readOnlyTransactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+    }
 
     @Nested
     @DisplayName("예외 케이스")
@@ -577,6 +593,38 @@ class MidpointRecommendationServiceImplTest {
 
             assertThat(response.recommendations().getFirst().routes().getFirst().departureName())
                     .isEqualTo("김참가자");
+        }
+    }
+
+    @Nested
+    @DisplayName("캐시 키 출발 시각 라운딩")
+    class CacheKeyRounding {
+
+        @Test
+        @DisplayName("departureTime이 null이면 고정된 키를 반환한다")
+        void roundDepartureTimeForCacheKey_null_returnsFixedKey() {
+            assertThat(MidpointRecommendationServiceImpl.roundDepartureTimeForCacheKey(null))
+                    .isEqualTo("now");
+        }
+
+        @Test
+        @DisplayName("같은 10분 버킷에 속하는 서로 다른 초 단위 시각은 같은 키로 라운딩된다")
+        void roundDepartureTimeForCacheKey_withinSameBucket_returnsSameKey() {
+            LocalDateTime t1 = LocalDateTime.of(2026, 7, 25, 15, 1, 5);
+            LocalDateTime t2 = LocalDateTime.of(2026, 7, 25, 15, 9, 59);
+
+            assertThat(MidpointRecommendationServiceImpl.roundDepartureTimeForCacheKey(t1))
+                    .isEqualTo(MidpointRecommendationServiceImpl.roundDepartureTimeForCacheKey(t2));
+        }
+
+        @Test
+        @DisplayName("다른 10분 버킷에 속하는 시각은 다른 키로 라운딩된다")
+        void roundDepartureTimeForCacheKey_differentBuckets_returnsDifferentKeys() {
+            LocalDateTime t1 = LocalDateTime.of(2026, 7, 25, 15, 9, 59);
+            LocalDateTime t2 = LocalDateTime.of(2026, 7, 25, 15, 10, 0);
+
+            assertThat(MidpointRecommendationServiceImpl.roundDepartureTimeForCacheKey(t1))
+                    .isNotEqualTo(MidpointRecommendationServiceImpl.roundDepartureTimeForCacheKey(t2));
         }
     }
 

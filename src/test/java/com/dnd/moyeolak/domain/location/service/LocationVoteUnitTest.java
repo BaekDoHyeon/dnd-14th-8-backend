@@ -6,12 +6,15 @@ import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.location.entity.LocationVote;
 import com.dnd.moyeolak.domain.location.repository.LocationVoteRepository;
 import com.dnd.moyeolak.domain.location.service.impl.LocationVoteServiceImpl;
+import com.dnd.moyeolak.domain.meeting.dto.UpdateLocationVoteRequest;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
 import com.dnd.moyeolak.domain.participant.service.ParticipantService;
 import com.dnd.moyeolak.global.exception.BusinessException;
 import com.dnd.moyeolak.global.response.ErrorCode;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -42,6 +48,9 @@ class LocationVoteUnitTest {
 
     @Mock
     private LocationVoteRepository locationVoteRepository;
+
+    @Mock
+    private CacheManager cacheManager;
 
     @InjectMocks
     private LocationVoteServiceImpl locationService;
@@ -563,6 +572,101 @@ class LocationVoteUnitTest {
             assertThatThrownBy(() -> locationService.listLocationVote(meetingId))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LOCATION_POLL_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("캐시 무효화 범위")
+    class CacheEviction {
+
+        private static final String CACHE_NAME = "midpointRecommendations";
+
+        private CacheManager realCacheManager;
+        private LocationVoteServiceImpl serviceWithRealCache;
+
+        @BeforeEach
+        void setUp() {
+            CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager(CACHE_NAME);
+            caffeineCacheManager.setCaffeine(Caffeine.newBuilder());
+            realCacheManager = caffeineCacheManager;
+            serviceWithRealCache = new LocationVoteServiceImpl(
+                    meetingRepository, participantService, locationVoteRepository, realCacheManager
+            );
+        }
+
+        @Test
+        @DisplayName("출발지 생성 시 해당 모임의 캐시만 무효화되고 다른 모임의 캐시는 유지된다")
+        void createLocationVote_evictsOnlyTargetMeetingCache() {
+            // given
+            Cache cache = realCacheManager.getCache(CACHE_NAME);
+            cache.put("meeting-A_now", "cached-A");
+            cache.put("meeting-B_now", "cached-B");
+
+            when(meetingRepository.findByIdWithAllAssociations("meeting-A"))
+                    .thenReturn(Optional.of(Meeting.ofId("meeting-A")));
+
+            CreateLocationVoteRequest request = new CreateLocationVoteRequest(
+                    "meeting-A", null, null, "홍길동", "서울시 강남구", "37.4979502", "127.0276368"
+            );
+
+            // when
+            serviceWithRealCache.createLocationVote(request);
+
+            // then
+            assertThat(cache.get("meeting-A_now")).isNull();
+            assertThat(cache.get("meeting-B_now").get()).isEqualTo("cached-B");
+        }
+
+        @Test
+        @DisplayName("출발지 수정 시 해당 모임의 캐시만 무효화되고 다른 모임의 캐시는 유지된다")
+        void updateLocationVote_evictsOnlyTargetMeetingCache() {
+            // given
+            Cache cache = realCacheManager.getCache(CACHE_NAME);
+            cache.put("meeting-A_now", "cached-A");
+            cache.put("meeting-B_now", "cached-B");
+
+            Meeting meetingA = Meeting.ofId("meeting-A");
+            LocationPoll locationPollA = LocationPoll.defaultOf(meetingA);
+            LocationVote voteA = LocationVote.of(
+                    locationPollA, "참가자", "서울시 강남구",
+                    new BigDecimal("37.4979502"), new BigDecimal("127.0276368")
+            );
+            when(locationVoteRepository.findById(1L)).thenReturn(Optional.of(voteA));
+
+            UpdateLocationVoteRequest request = new UpdateLocationVoteRequest(
+                    "참가자", "서울시 홍대입구", "37.5571010", "126.9236450"
+            );
+
+            // when
+            serviceWithRealCache.updateLocationVote(1L, request);
+
+            // then
+            assertThat(cache.get("meeting-A_now")).isNull();
+            assertThat(cache.get("meeting-B_now").get()).isEqualTo("cached-B");
+        }
+
+        @Test
+        @DisplayName("출발지 삭제 시 해당 모임의 캐시만 무효화되고 다른 모임의 캐시는 유지된다")
+        void deleteLocationVote_evictsOnlyTargetMeetingCache() {
+            // given
+            Cache cache = realCacheManager.getCache(CACHE_NAME);
+            cache.put("meeting-A_now", "cached-A");
+            cache.put("meeting-B_now", "cached-B");
+
+            Meeting meetingA = Meeting.ofId("meeting-A");
+            LocationPoll locationPollA = LocationPoll.defaultOf(meetingA);
+            LocationVote voteA = LocationVote.of(
+                    locationPollA, "참가자", "서울시 강남구",
+                    new BigDecimal("37.4979502"), new BigDecimal("127.0276368")
+            );
+            when(locationVoteRepository.findById(1L)).thenReturn(Optional.of(voteA));
+
+            // when
+            serviceWithRealCache.deleteLocationVote(1L);
+
+            // then
+            assertThat(cache.get("meeting-A_now")).isNull();
+            assertThat(cache.get("meeting-B_now").get()).isEqualTo("cached-B");
         }
     }
 }
