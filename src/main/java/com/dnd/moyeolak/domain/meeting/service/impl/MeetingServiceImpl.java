@@ -33,6 +33,8 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MeetingServiceImpl implements MeetingService {
 
+    private static final int RECENT_MEETING_LIMIT = 5;
+
     private final MeetingRepository meetingRepository;
     private final ParticipantRepository participantRepository;
     private final ParticipantService participantService;
