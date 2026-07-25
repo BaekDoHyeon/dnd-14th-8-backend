@@ -1,6 +1,7 @@
 package com.dnd.moyeolak.domain.meeting.entity;
 
 import com.dnd.moyeolak.domain.location.entity.LocationPoll;
+import com.dnd.moyeolak.domain.meeting.enums.MeetingFlow;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
 import com.dnd.moyeolak.domain.schedule.entity.SchedulePoll;
 import com.dnd.moyeolak.global.entity.BaseEntity;
@@ -25,6 +26,11 @@ public class Meeting extends BaseEntity {
 
     @Column(comment = "참여자 수")
     private int participantCount;
+
+    @Builder.Default
+    @Column(name = "initial_flow", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private MeetingFlow initialFlow = MeetingFlow.SCHEDULE;
 
     @OneToOne(mappedBy = "meeting", cascade = CascadeType.ALL)
     private SchedulePoll schedulePoll;
@@ -58,14 +64,20 @@ public class Meeting extends BaseEntity {
     }
 
     public static Meeting of(int participantCount) {
+        return of(participantCount, MeetingFlow.SCHEDULE);
+    }
+
+    public static Meeting of(int participantCount, MeetingFlow initialFlow) {
         return Meeting.builder()
                 .participantCount(participantCount)
+                .initialFlow(initialFlow == null ? MeetingFlow.SCHEDULE : initialFlow)
                 .build();
     }
 
     public static Meeting ofId(String id) {
         return Meeting.builder()
                 .id(id)
+                .initialFlow(MeetingFlow.SCHEDULE)
                 .build();
     }
 }

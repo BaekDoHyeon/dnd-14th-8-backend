@@ -18,6 +18,8 @@ public interface ParticipantRepository extends JpaRepository<Participant, Long> 
     @Query("""
         SELECT DISTINCT p FROM Participant p
         JOIN FETCH p.meeting m
+        LEFT JOIN FETCH m.schedulePoll
+        LEFT JOIN FETCH m.locationPoll
         LEFT JOIN FETCH m.participants participants
         WHERE p.localStorageKey = :localStorageKey
         ORDER BY m.createdAt DESC

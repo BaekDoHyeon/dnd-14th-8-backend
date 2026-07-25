@@ -1,10 +1,16 @@
 package com.dnd.moyeolak.domain.meeting.dto;
 
+import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
+import com.dnd.moyeolak.domain.meeting.enums.MeetingFlow;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
+import com.dnd.moyeolak.domain.schedule.entity.SchedulePoll;
+import com.dnd.moyeolak.global.enums.PollStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Schema(description = "내 모임 목록 응답")
 public record MyMeetingResponse(
@@ -21,7 +27,10 @@ public record MyMeetingResponse(
         LocalDateTime createdAt,
 
         @Schema(description = "내 방장 여부", example = "true")
-        boolean isHost
+        boolean isHost,
+
+        @Schema(description = "최근 모임에서 진입 가능한 플로우", example = "[\"SCHEDULE\", \"LOCATION\"]")
+        List<MeetingFlow> availableFlows
 ) {
     public static MyMeetingResponse of(Meeting meeting, Participant myParticipant, String hostName) {
         return new MyMeetingResponse(
@@ -29,7 +38,46 @@ public record MyMeetingResponse(
                 hostName,
                 meeting.getParticipantCount(),
                 meeting.getCreatedAt(),
-                myParticipant.isHost()
+                myParticipant.isHost(),
+                resolveAvailableFlows(meeting)
         );
+    }
+
+    private static List<MeetingFlow> resolveAvailableFlows(Meeting meeting) {
+        boolean hasScheduleFlow = flowOrDefault(meeting) == MeetingFlow.SCHEDULE || hasScheduleUsage(meeting);
+        boolean hasLocationFlow = flowOrDefault(meeting) == MeetingFlow.LOCATION || hasLocationUsage(meeting);
+
+        List<MeetingFlow> flows = new ArrayList<>();
+        if (hasScheduleFlow) {
+            flows.add(MeetingFlow.SCHEDULE);
+        }
+        if (hasLocationFlow) {
+            flows.add(MeetingFlow.LOCATION);
+        }
+        return flows.isEmpty() ? List.of(MeetingFlow.SCHEDULE) : flows;
+    }
+
+    private static MeetingFlow flowOrDefault(Meeting meeting) {
+        return meeting.getInitialFlow() == null ? MeetingFlow.SCHEDULE : meeting.getInitialFlow();
+    }
+
+    private static boolean hasScheduleUsage(Meeting meeting) {
+        SchedulePoll schedulePoll = meeting.getSchedulePoll();
+        if (schedulePoll != null && schedulePoll.getPollStatus() == PollStatus.CONFIRMED) {
+            return true;
+        }
+
+        return meeting.getParticipants().stream()
+                .anyMatch(participant -> !participant.getScheduleVotes().isEmpty());
+    }
+
+    private static boolean hasLocationUsage(Meeting meeting) {
+        LocationPoll locationPoll = meeting.getLocationPoll();
+        if (locationPoll != null && !locationPoll.getLocationVotes().isEmpty()) {
+            return true;
+        }
+
+        return meeting.getParticipants().stream()
+                .anyMatch(participant -> !participant.getLocationVotes().isEmpty());
     }
 }

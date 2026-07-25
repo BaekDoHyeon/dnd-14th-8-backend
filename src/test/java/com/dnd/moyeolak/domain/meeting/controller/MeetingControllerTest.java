@@ -2,6 +2,7 @@ package com.dnd.moyeolak.domain.meeting.controller;
 
 import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
 import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
+import com.dnd.moyeolak.domain.meeting.enums.MeetingFlow;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.global.exception.GlobalExceptionAdvice;
 import com.dnd.moyeolak.global.response.SuccessCode;
@@ -68,7 +69,8 @@ class MeetingControllerTest {
                         "민수",
                         4,
                         LocalDateTime.of(2026, 7, 23, 14, 10),
-                        true
+                        true,
+                        List.of(MeetingFlow.SCHEDULE, MeetingFlow.LOCATION)
                 )
         );
         when(meetingService.findMyMeetings(LOCAL_STORAGE_KEY)).thenReturn(response);
@@ -83,7 +85,9 @@ class MeetingControllerTest {
                 .andExpect(jsonPath("$.data[0].hostName").value("민수"))
                 .andExpect(jsonPath("$.data[0].participantCount").value(4))
                 .andExpect(jsonPath("$.data[0].createdAt").value("2026-07-23T14:10:00"))
-                .andExpect(jsonPath("$.data[0].isHost").value(true));
+                .andExpect(jsonPath("$.data[0].isHost").value(true))
+                .andExpect(jsonPath("$.data[0].availableFlows[0]").value("SCHEDULE"))
+                .andExpect(jsonPath("$.data[0].availableFlows[1]").value("LOCATION"));
 
         verify(meetingService).findMyMeetings(LOCAL_STORAGE_KEY);
     }

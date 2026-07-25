@@ -6,17 +6,17 @@ TRUNCATE TABLE meeting CASCADE;
 -- =====================================================
 
 -- Meeting 10개
-INSERT INTO meeting (meeting_id, participant_count, created_at, updated_at) VALUES
-('test-meeting-001', 10, NOW(), NOW()),
-('test-meeting-002', 4, NOW(), NOW()),
-('test-meeting-003', 6, NOW(), NOW()),
-('test-meeting-004', 3, NOW(), NOW()),
-('test-meeting-005', 8, NOW(), NOW()),
-('test-meeting-006', 2, NOW(), NOW()),
-('test-meeting-007', 7, NOW(), NOW()),
-('test-meeting-008', 4, NOW(), NOW()),
-('test-meeting-009', 5, NOW(), NOW()),
-('test-meeting-010', 6, NOW(), NOW());
+INSERT INTO meeting (meeting_id, participant_count, initial_flow, created_at, updated_at) VALUES
+('test-meeting-001', 10, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-002', 4, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-003', 6, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-004', 3, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-005', 8, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-006', 2, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-007', 7, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-008', 4, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-009', 5, 'SCHEDULE', NOW(), NOW()),
+('test-meeting-010', 6, 'SCHEDULE', NOW(), NOW());
 
 -- SchedulePoll 10개 (각 모임당 1개, 14일간 날짜 옵션)
 INSERT INTO schedule_poll (meeting_id, date_options, start_time, end_time, confirmed_start_time, confirmed_end_time, poll_status, created_at, updated_at) VALUES

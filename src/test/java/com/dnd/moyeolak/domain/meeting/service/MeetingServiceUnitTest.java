@@ -1,9 +1,11 @@
 package com.dnd.moyeolak.domain.meeting.service;
 
 import com.dnd.moyeolak.domain.location.entity.LocationPoll;
+import com.dnd.moyeolak.domain.location.entity.LocationVote;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
+import com.dnd.moyeolak.domain.meeting.enums.MeetingFlow;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
 import com.dnd.moyeolak.domain.meeting.service.impl.MeetingServiceImpl;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
@@ -26,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -226,6 +229,7 @@ class MeetingServiceUnitTest {
         assertThat(response.participantCount()).isEqualTo(4);
         assertThat(response.createdAt()).isEqualTo(createdAt);
         assertThat(response.isHost()).isTrue();
+        assertThat(response.availableFlows()).containsExactly(MeetingFlow.SCHEDULE);
     }
 
     @Test
@@ -252,6 +256,66 @@ class MeetingServiceUnitTest {
         assertThat(responses).hasSize(1);
         assertThat(responses.getFirst().hostName()).isEqualTo("지영");
         assertThat(responses.getFirst().isHost()).isFalse();
+    }
+
+    @Test
+    @DisplayName("내 모임 조회 시 중간지점으로 생성된 모임은 위치 플로우만 반환한다")
+    void findMyMeetings_returnsLocationFlowForLocationOnlyMeeting() {
+        // given
+        String localStorageKey = "location-host-session-key";
+        Meeting meeting = Meeting.of(3, MeetingFlow.LOCATION);
+        ReflectionTestUtils.setField(meeting, "id", "location-meeting-id");
+        ReflectionTestUtils.setField(meeting, "createdAt", LocalDateTime.of(2026, 7, 26, 12, 0));
+
+        Participant host = Participant.hostOf(meeting, localStorageKey, "민수");
+        meeting.addParticipant(host);
+        meeting.addPolls(SchedulePoll.defaultOf(meeting), LocationPoll.defaultOf(meeting));
+
+        when(participantRepository.findAllByLocalStorageKeyWithMeetingAndParticipants(localStorageKey))
+                .thenReturn(List.of(host));
+
+        // when
+        List<MyMeetingResponse> responses = meetingService.findMyMeetings(localStorageKey);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().availableFlows()).containsExactly(MeetingFlow.LOCATION);
+    }
+
+    @Test
+    @DisplayName("내 모임 조회 시 일정과 위치 투표가 모두 있으면 두 플로우를 반환한다")
+    void findMyMeetings_returnsBothFlowsWhenScheduleAndLocationVotesExist() {
+        // given
+        String localStorageKey = "both-flow-session-key";
+        Meeting meeting = Meeting.of(4, MeetingFlow.SCHEDULE);
+        ReflectionTestUtils.setField(meeting, "id", "both-flow-meeting-id");
+        ReflectionTestUtils.setField(meeting, "createdAt", LocalDateTime.of(2026, 7, 26, 13, 0));
+
+        Participant host = Participant.hostOf(meeting, localStorageKey, "민수");
+        meeting.addParticipant(host);
+        SchedulePoll schedulePoll = SchedulePoll.defaultOf(meeting);
+        LocationPoll locationPoll = LocationPoll.defaultOf(meeting);
+        meeting.addPolls(schedulePoll, locationPoll);
+
+        host.addScheduleVote(ScheduleVote.of(schedulePoll, List.of(LocalDateTime.of(2026, 7, 27, 10, 0))));
+        host.addLocationVote(LocationVote.of(
+                locationPoll,
+                host,
+                "서울특별시 강남구",
+                BigDecimal.valueOf(37.4979),
+                BigDecimal.valueOf(127.0276)
+        ));
+
+        when(participantRepository.findAllByLocalStorageKeyWithMeetingAndParticipants(localStorageKey))
+                .thenReturn(List.of(host));
+
+        // when
+        List<MyMeetingResponse> responses = meetingService.findMyMeetings(localStorageKey);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().availableFlows())
+                .containsExactly(MeetingFlow.SCHEDULE, MeetingFlow.LOCATION);
     }
 
     private Meeting createMeetingWithAllAssociations() {

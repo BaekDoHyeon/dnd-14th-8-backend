@@ -44,7 +44,7 @@ public class MeetingServiceImpl implements MeetingService {
     @Override
     @Transactional
     public String createMeeting(CreateMeetingRequest request) {
-        Meeting meeting = Meeting.of(request.participantCount());
+        Meeting meeting = Meeting.of(request.participantCount(), request.flowOrDefault());
 
         meeting.addParticipant(Participant.hostOf(meeting, request.localStorageKey(), request.participantName()));
 
