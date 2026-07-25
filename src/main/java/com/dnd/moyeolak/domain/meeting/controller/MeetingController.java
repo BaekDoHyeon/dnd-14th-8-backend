@@ -4,6 +4,7 @@ import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleVoteResultResponse;
 import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
+import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.global.response.ApiResponse;
@@ -39,6 +40,15 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<LandingStatsResponse>> getLandingStats() {
         LandingStatsResponse stats = meetingService.getLandingStats();
         return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "내 모임 목록 조회", description = "브라우저 고유 키로 생성/참여 완료한 모임 목록을 조회합니다.")
+    public ResponseEntity<ApiResponse<List<MyMeetingResponse>>> getMyMeetings(
+            @RequestParam String localStorageKey
+    ) {
+        List<MyMeetingResponse> myMeetings = meetingService.findMyMeetings(localStorageKey);
+        return ResponseEntity.ok(ApiResponse.success(myMeetings));
     }
 
     @GetMapping("/{meetingId}/schedules")

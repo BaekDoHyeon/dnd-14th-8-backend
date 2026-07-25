@@ -5,12 +5,14 @@ import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleVoteResultResponse;
 import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
+import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
 import com.dnd.moyeolak.domain.meeting.service.MeetingService;
 import com.dnd.moyeolak.domain.participant.dto.ParticipantResponse;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
+import com.dnd.moyeolak.domain.participant.repository.ParticipantRepository;
 import com.dnd.moyeolak.domain.participant.service.ParticipantService;
 import com.dnd.moyeolak.domain.schedule.entity.SchedulePoll;
 import com.dnd.moyeolak.domain.schedule.entity.ScheduleVote;
@@ -32,6 +34,7 @@ import java.util.List;
 public class MeetingServiceImpl implements MeetingService {
 
     private final MeetingRepository meetingRepository;
+    private final ParticipantRepository participantRepository;
     private final ParticipantService participantService;
     private final ScheduleVoteService scheduleVoteService;
     private final Clock clock;
@@ -117,6 +120,26 @@ public class MeetingServiceImpl implements MeetingService {
     @Override
     public List<String> findAllMeetings() {
         return meetingRepository.findAllMeetingsId();
+    }
+
+    @Override
+    public List<MyMeetingResponse> findMyMeetings(String localStorageKey) {
+        if (localStorageKey == null || localStorageKey.isBlank()) {
+            return List.of();
+        }
+
+        return participantRepository.findAllByLocalStorageKeyWithMeetingAndParticipants(localStorageKey).stream()
+                .map(participant -> {
+                    Meeting meeting = participant.getMeeting();
+                    String hostName = meeting.getParticipants().stream()
+                            .filter(Participant::isHost)
+                            .findFirst()
+                            .map(Participant::getName)
+                            .orElse("방장");
+
+                    return MyMeetingResponse.of(meeting, participant, hostName);
+                })
+                .toList();
     }
 
     @Override

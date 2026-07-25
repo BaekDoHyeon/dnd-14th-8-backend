@@ -2,10 +2,12 @@ package com.dnd.moyeolak.domain.meeting.service;
 
 import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
+import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
 import com.dnd.moyeolak.domain.meeting.service.impl.MeetingServiceImpl;
 import com.dnd.moyeolak.domain.participant.entity.Participant;
+import com.dnd.moyeolak.domain.participant.repository.ParticipantRepository;
 import com.dnd.moyeolak.domain.schedule.entity.SchedulePoll;
 import com.dnd.moyeolak.domain.schedule.entity.ScheduleVote;
 import com.dnd.moyeolak.global.enums.PollStatus;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -40,6 +43,9 @@ class MeetingServiceUnitTest {
 
     @Mock
     private Clock clock;
+
+    @Mock
+    private ParticipantRepository participantRepository;
 
     @InjectMocks
     private MeetingServiceImpl meetingService;
@@ -190,6 +196,62 @@ class MeetingServiceUnitTest {
 
         // then
         assertThat(response.todayCreatedMeetingCount()).isEqualTo(128L);
+    }
+
+    @Test
+    @DisplayName("내 모임 조회 시 localStorageKey에 연결된 모임 요약 목록을 반환한다")
+    void findMyMeetings_returnsMeetingSummaries() {
+        // given
+        String localStorageKey = "my-session-key";
+        LocalDateTime createdAt = LocalDateTime.of(2026, 7, 23, 14, 10);
+        Meeting meeting = Meeting.of(4);
+        ReflectionTestUtils.setField(meeting, "id", "meeting-id");
+        ReflectionTestUtils.setField(meeting, "createdAt", createdAt);
+
+        Participant host = Participant.hostOf(meeting, localStorageKey, "민수");
+        meeting.addParticipant(host);
+        meeting.addParticipant(Participant.of(meeting, "other-session-key", "지영"));
+
+        when(participantRepository.findAllByLocalStorageKeyWithMeetingAndParticipants(localStorageKey))
+                .thenReturn(List.of(host));
+
+        // when
+        List<MyMeetingResponse> responses = meetingService.findMyMeetings(localStorageKey);
+
+        // then
+        assertThat(responses).hasSize(1);
+        MyMeetingResponse response = responses.getFirst();
+        assertThat(response.meetingId()).isEqualTo("meeting-id");
+        assertThat(response.hostName()).isEqualTo("민수");
+        assertThat(response.participantCount()).isEqualTo(4);
+        assertThat(response.createdAt()).isEqualTo(createdAt);
+        assertThat(response.isHost()).isTrue();
+    }
+
+    @Test
+    @DisplayName("내 모임 조회 시 참여자로 속한 모임은 isHost false로 반환한다")
+    void findMyMeetings_returnsParticipantRole() {
+        // given
+        String localStorageKey = "participant-session-key";
+        Meeting meeting = Meeting.of(3);
+        ReflectionTestUtils.setField(meeting, "id", "meeting-id");
+        ReflectionTestUtils.setField(meeting, "createdAt", LocalDateTime.of(2026, 7, 23, 15, 30));
+
+        Participant host = Participant.hostOf(meeting, "host-session-key", "지영");
+        Participant participant = Participant.of(meeting, localStorageKey, "민수");
+        meeting.addParticipant(host);
+        meeting.addParticipant(participant);
+
+        when(participantRepository.findAllByLocalStorageKeyWithMeetingAndParticipants(localStorageKey))
+                .thenReturn(List.of(participant));
+
+        // when
+        List<MyMeetingResponse> responses = meetingService.findMyMeetings(localStorageKey);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().hostName()).isEqualTo("지영");
+        assertThat(responses.getFirst().isHost()).isFalse();
     }
 
     private Meeting createMeetingWithAllAssociations() {

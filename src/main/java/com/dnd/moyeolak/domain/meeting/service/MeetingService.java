@@ -4,6 +4,7 @@ import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleVoteResultResponse;
 import com.dnd.moyeolak.domain.meeting.dto.LandingStatsResponse;
+import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 
@@ -24,6 +25,8 @@ public interface MeetingService {
     LandingStatsResponse getLandingStats();
 
     List<String> findAllMeetings();
+
+    List<MyMeetingResponse> findMyMeetings(String localStorageKey);
 
     void deleteMeeting(String meetingId);
 }

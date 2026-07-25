@@ -3,6 +3,7 @@ package com.dnd.moyeolak.domain.meeting.service;
 import com.dnd.moyeolak.domain.location.entity.LocationPoll;
 import com.dnd.moyeolak.domain.meeting.dto.CreateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.dto.GetMeetingScheduleResponse;
+import com.dnd.moyeolak.domain.meeting.dto.MyMeetingResponse;
 import com.dnd.moyeolak.domain.meeting.dto.UpdateMeetingRequest;
 import com.dnd.moyeolak.domain.meeting.entity.Meeting;
 import com.dnd.moyeolak.domain.meeting.repository.MeetingRepository;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -428,6 +430,41 @@ class MeetingServiceIntegrationTest {
                     .isInstanceOf(BusinessException.class);
         }
 
+    }
+
+    @Nested
+    @DisplayName("내 모임 조회")
+    class FindMyMeetings {
+
+        @Test
+        @DisplayName("localStorageKey가 일치하는 모임만 조회한다")
+        void findMyMeetings_returnsOnlyMeetingsForLocalStorageKey() {
+            // given
+            String myKey = "my-local-storage-key";
+            String myMeetingId = meetingService.createMeeting(new CreateMeetingRequest(
+                    4,
+                    myKey,
+                    "민수"
+            ));
+            meetingService.createMeeting(new CreateMeetingRequest(
+                    3,
+                    "other-local-storage-key",
+                    "지영"
+            ));
+            em.flush();
+            em.clear();
+
+            // when
+            List<MyMeetingResponse> responses = meetingService.findMyMeetings(myKey);
+
+            // then
+            assertThat(responses).hasSize(1);
+            assertThat(responses.getFirst().meetingId()).isEqualTo(myMeetingId);
+            assertThat(responses.getFirst().hostName()).isEqualTo("민수");
+            assertThat(responses.getFirst().participantCount()).isEqualTo(4);
+            assertThat(responses.getFirst().isHost()).isTrue();
+            assertThat(responses.getFirst().createdAt()).isNotNull();
+        }
     }
 
     private String createTestMeeting() {

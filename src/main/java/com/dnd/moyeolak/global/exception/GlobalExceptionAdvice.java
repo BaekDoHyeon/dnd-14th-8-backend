@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
@@ -49,6 +50,19 @@ public class GlobalExceptionAdvice {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ErrorCode.INVALID_PARAMETER, errors));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException ex) {
+
+        Map<String, String> errors = Map.of(ex.getParameterName(), "필수 요청 파라미터입니다.");
+
+        log.warn("필수 요청 파라미터 누락: {}", errors);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ErrorCode.MISSING_REQUIRED_FIELD, errors));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
