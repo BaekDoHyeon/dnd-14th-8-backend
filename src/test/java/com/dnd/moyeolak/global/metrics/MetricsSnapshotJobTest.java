@@ -1,5 +1,6 @@
 package com.dnd.moyeolak.global.metrics;
 
+import com.dnd.moyeolak.global.metrics.alert.QuotaAlertNotifier;
 import com.dnd.moyeolak.global.metrics.entity.ExternalApiMetricSnapshot;
 import com.dnd.moyeolak.global.metrics.repository.ExternalApiMetricSnapshotRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,13 +29,15 @@ class MetricsSnapshotJobTest {
 
     private MetricsSnapshotReader reader;
     private ExternalApiMetricSnapshotRepository repository;
+    private QuotaAlertNotifier quotaAlertNotifier;
     private MetricsSnapshotJob job;
 
     @BeforeEach
     void setUp() {
         reader = mock(MetricsSnapshotReader.class);
         repository = mock(ExternalApiMetricSnapshotRepository.class);
-        job = new MetricsSnapshotJob(reader, repository, FIXED_CLOCK, RETENTION_DAYS);
+        quotaAlertNotifier = mock(QuotaAlertNotifier.class);
+        job = new MetricsSnapshotJob(reader, repository, quotaAlertNotifier, FIXED_CLOCK, RETENTION_DAYS);
     }
 
     @Test
@@ -70,6 +73,8 @@ class MetricsSnapshotJobTest {
                 .filter(s -> s.getApi().equals("google_routes")).findFirst().orElseThrow();
         assertThat(google.getComputeRoutesUnits()).isEqualTo(3);
         assertThat(google.getRouteMatrixUnits()).isEqualTo(7);
+
+        verify(quotaAlertNotifier).checkAndNotify();
     }
 
     @Test

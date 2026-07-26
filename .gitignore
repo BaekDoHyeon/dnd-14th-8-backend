@@ -52,3 +52,6 @@ infra/terraform/.terraform/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+
+### Git Worktrees ###
+.worktrees/

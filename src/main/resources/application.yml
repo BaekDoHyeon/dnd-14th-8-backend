@@ -26,6 +26,10 @@ external-api:
     # Google 과금 단가 (Basic 티어, USD). FieldMask가 Advanced 이상이면 상향 필요
     google-compute-routes-per-request: 0.005
     google-route-matrix-per-element: 0.005
+  alert:
+    threshold-percent: 20             # 일일 quota 잔여 비율이 이 값(%) 미만이면 Slack 알림
+    slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+    daily-summary-cron: "0 50 23 * * *"   # 매일 23:50 오늘 통계 요약 발송
 moyeolak:
   rate-limit:
     midpoint-recommendation:
