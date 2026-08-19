@@ -37,6 +37,13 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN}
       # Slack 알림용 Incoming Webhook URL. 서버 /app/moyeolak/.env 에 정의. 미설정 시 알림 기능 비활성.
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # AWS 크레딧 잔액 Slack 알림. ce:GetCostAndUsage 만 가진 읽기 전용 IAM 키를 쓴다.
+      # (배포용 AWS 키와 분리하려고 이름을 AWS_COST_* 로 둔다.) 미설정 시 알림 비활성.
+      AWS_COST_ALERT_ENABLED: ${AWS_COST_ALERT_ENABLED:-false}
+      AWS_COST_ACCESS_KEY_ID: ${AWS_COST_ACCESS_KEY_ID:-}
+      AWS_COST_SECRET_ACCESS_KEY: ${AWS_COST_SECRET_ACCESS_KEY:-}
+      AWS_CREDIT_TOTAL: ${AWS_CREDIT_TOTAL:-}
+      AWS_CREDIT_START_DATE: ${AWS_CREDIT_START_DATE:-2026-07-01}
       # 2GB 인스턴스에서 힙 폭주 방지
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0 -Duser.timezone=Asia/Seoul"
     volumes:

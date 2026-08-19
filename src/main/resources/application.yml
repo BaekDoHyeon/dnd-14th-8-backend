@@ -30,6 +30,18 @@ external-api:
     threshold-percent: 20             # 일일 quota 잔여 비율이 이 값(%) 미만이면 Slack 알림
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
     daily-summary-cron: "0 50 23 * * *"   # 매일 23:50 오늘 통계 요약 발송
+# AWS 크레딧 잔액 Slack 알림. Cost Explorer(us-east-1) 조회 -> 매일 1회 발송.
+# AWS는 크레딧 잔액 조회 API를 제공하지 않으므로 부여 총액을 직접 설정해야 잔액이 계산된다.
+# 미설정 시 누적 사용액/일평균만 발송한다. https://console.aws.amazon.com/billing/home#/credits
+aws:
+  cost:
+    enabled: ${AWS_COST_ALERT_ENABLED:false}
+    access-key: ${AWS_COST_ACCESS_KEY_ID:}
+    secret-key: ${AWS_COST_SECRET_ACCESS_KEY:}
+    credit-total: ${AWS_CREDIT_TOTAL:}        # 부여받은 크레딧 총액(USD). 예: 300
+    credit-start-date: ${AWS_CREDIT_START_DATE:2026-07-01}   # 크레딧 차감 집계 시작일
+    cron: "0 0 9 * * *"                       # 매일 09:00 발송 (CE 데이터는 약 24h 지연)
+
 moyeolak:
   rate-limit:
     midpoint-recommendation:
