@@ -36,7 +36,7 @@ public class DailySummaryNotifier {
         this.clock = clock;
     }
 
-    @Scheduled(cron = "${external-api.alert.daily-summary-cron:0 50 23 * * *}")
+    @Scheduled(cron = "${external-api.alert.daily-summary-cron:0 0 23 * * *}")
     public void sendDailySummary() {
         long todayMeetingCount = meetingService.getLandingStats().todayCreatedMeetingCount();
         List<ApiSummary> apis = statsService.summary().apis();

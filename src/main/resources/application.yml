@@ -29,7 +29,7 @@ external-api:
   alert:
     threshold-percent: 20             # 일일 quota 잔여 비율이 이 값(%) 미만이면 Slack 알림
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
-    daily-summary-cron: "0 50 23 * * *"   # 매일 23:50 오늘 통계 요약 발송
+    daily-summary-cron: "0 0 23 * * *"    # 매일 23:00 오늘 통계 요약 발송
 # AWS 크레딧 잔액 Slack 알림. Cost Explorer(us-east-1) 조회 -> 매일 1회 발송.
 # AWS는 크레딧 잔액 조회 API를 제공하지 않으므로 부여 총액을 직접 설정해야 잔액이 계산된다.
 # 미설정 시 누적 사용액/일평균만 발송한다. https://console.aws.amazon.com/billing/home#/credits
